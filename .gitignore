@@ -29,3 +29,9 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Database
+.claude-book.db
+.claude-book.db-shm
+.claude-book.db-wal
+.claude-book-review.json

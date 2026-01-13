@@ -53,7 +53,8 @@ scan
   .command("list")
   .description("List photos from a scan (defaults to latest)")
   .argument("[scanId]", "Scan ID (defaults to latest scan)")
-  .action((scanId) => scanListCommand(scanId));
+  .option("-a, --all", "Show all photos, not just those with matches")
+  .action((scanId, options) => scanListCommand(scanId, options));
 
 scan
   .command("approve")

@@ -334,10 +334,14 @@ function getScanWithPhotos(scanId?: number): { scan: Scan; photos: IndexedPhoto[
   return { scan, photos: indexedPhotos };
 }
 
+interface ScanListOptions {
+  all?: boolean;
+}
+
 /**
  * scan list - Show details about a scan
  */
-export async function scanListCommand(scanId?: string): Promise<void> {
+export async function scanListCommand(scanId?: string, options: ScanListOptions = {}): Promise<void> {
   try {
     initDatabase();
   } catch {
@@ -377,25 +381,32 @@ export async function scanListCommand(scanId?: string): Promise<void> {
     return;
   }
 
-  // Filter to only photos with matches
-  const photosWithMatches = photos.filter(p => p.recognitions.length > 0);
+  // Show all photos or only those with matches
+  const photosToShow = options.all ? photos : photos.filter(p => p.recognitions.length > 0);
 
-  if (photosWithMatches.length === 0) {
+  if (photosToShow.length === 0) {
     console.log("No matches found in this scan.");
     console.log(`(${photos.length} photos scanned with no face matches)`);
+    console.log("\nUse --all to show all photos.");
     return;
   }
 
-  console.log(`Photos with matches (${photosWithMatches.length}):`);
+  const label = options.all ? "All photos" : "Photos with matches";
+  console.log(`${label} (${photosToShow.length}):`);
   console.log();
 
-  // Print each photo with matches
-  for (const photo of photosWithMatches) {
-    const matches = photo.recognitions
-      .map((r) => `${r.personName} (${Math.round(r.confidence)}%)`)
-      .join(", ");
-    console.log(`[${photo.index}] ${photo.path}`);
-    console.log(`     ${matches}`);
+  // Print each photo
+  for (const photo of photosToShow) {
+    if (photo.recognitions.length > 0) {
+      const matches = photo.recognitions
+        .map((r) => `${r.personName} (${Math.round(r.confidence)}%)`)
+        .join(", ");
+      console.log(`[${photo.index}] ${photo.path}`);
+      console.log(`     ${matches}`);
+    } else {
+      console.log(`[${photo.index}] ${photo.path}`);
+      console.log(`     (no matches)`);
+    }
   }
 
   console.log();
