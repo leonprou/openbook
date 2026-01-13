@@ -3,6 +3,7 @@ import cliProgress from "cli-progress";
 import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { scanReferencesDirectory } from "../sources/local";
+import { initDatabase, createPerson, updatePersonFaceCount } from "../db";
 
 interface TrainOptions {
   references?: string;
@@ -13,6 +14,11 @@ export async function trainCommand(options: TrainOptions): Promise<void> {
   const referencesPath = options.references ?? config.training.referencesPath;
 
   const spinner = ora();
+
+  // Initialize database
+  spinner.start("Initializing database...");
+  initDatabase();
+  spinner.succeed("Database initialized");
 
   // Scan references directory
   spinner.start("Scanning references directory...");
@@ -59,10 +65,12 @@ export async function trainCommand(options: TrainOptions): Promise<void> {
 
   progressBar.start(totalPhotos, 0, { person: "" });
 
-  const results: { person: string; indexed: number; errors: string[] }[] = [];
+  const results: { person: string; personId: number; indexed: number; errors: string[] }[] = [];
 
   for (const [personName, photos] of people) {
-    const personResult = { person: personName, indexed: 0, errors: [] as string[] };
+    // Create person record in database
+    const person = createPerson(personName);
+    const personResult = { person: personName, personId: person.id, indexed: 0, errors: [] as string[] };
 
     for (const photoPath of photos) {
       progressBar.increment({ person: personName });
@@ -79,6 +87,8 @@ export async function trainCommand(options: TrainOptions): Promise<void> {
       }
     }
 
+    // Update face count in database
+    updatePersonFaceCount(person.id, personResult.indexed);
     results.push(personResult);
   }
 

@@ -16,6 +16,9 @@ import type {
   CollectionInfo,
   BoundingBox,
 } from "./types";
+import { createLogger } from "../logger";
+
+const log = createLogger("rekognition");
 
 export class FaceRecognitionClient {
   private client: RekognitionClient;
@@ -97,6 +100,7 @@ export class FaceRecognitionClient {
     personName: string
   ): Promise<IndexedFace | null> {
     return this.limiter.schedule(async () => {
+      log.debug({ imagePath, personName }, "Indexing face");
       const imageBytes = await this.prepareImage(imagePath);
 
       const response = await this.client.send(
@@ -112,8 +116,14 @@ export class FaceRecognitionClient {
 
       const face = response.FaceRecords?.[0]?.Face;
       if (!face || !face.FaceId) {
+        log.debug({ imagePath, personName }, "No face detected in image");
         return null;
       }
+
+      log.debug(
+        { imagePath, personName, faceId: face.FaceId, confidence: face.Confidence },
+        "Face indexed successfully"
+      );
 
       return {
         faceId: face.FaceId,
@@ -126,6 +136,7 @@ export class FaceRecognitionClient {
 
   async searchFaces(imagePath: string): Promise<FaceMatch[]> {
     return this.limiter.schedule(async () => {
+      log.debug({ imagePath }, "Searching faces");
       const imageBytes = await this.prepareImage(imagePath);
 
       try {
@@ -153,12 +164,18 @@ export class FaceRecognitionClient {
           }
         }
 
+        log.debug(
+          { imagePath, matchCount: matches.length, matches: matches.map(m => ({ person: m.personName, confidence: m.confidence.toFixed(2) })) },
+          "Search completed"
+        );
+
         return matches;
       } catch (error: any) {
         if (error.name === "InvalidParameterException") {
-          // No face detected in image
+          log.debug({ imagePath }, "No face detected in image");
           return [];
         }
+        log.error({ imagePath, error: error.message }, "Search failed");
         throw error;
       }
     });
@@ -195,10 +212,16 @@ export class FaceRecognitionClient {
     const metadata = await sharp(buffer).metadata();
     const maxDimension = 4096;
 
+    log.debug(
+      { imagePath, format: metadata.format, width: metadata.width, height: metadata.height, size: buffer.length },
+      "Preparing image"
+    );
+
     if (
       (metadata.width && metadata.width > maxDimension) ||
       (metadata.height && metadata.height > maxDimension)
     ) {
+      log.debug({ imagePath }, "Resizing large image");
       return await sharp(buffer)
         .resize(maxDimension, maxDimension, { fit: "inside" })
         .jpeg({ quality: 90 })
@@ -210,6 +233,7 @@ export class FaceRecognitionClient {
       imagePath.toLowerCase().endsWith(".heic") ||
       metadata.format === "heif"
     ) {
+      log.debug({ imagePath }, "Converting HEIC to JPEG");
       return await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
     }
 

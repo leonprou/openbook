@@ -6,6 +6,8 @@ A CLI tool for organizing family photos using face recognition. Automatically id
 
 - **Scans** your photo library (local folders, iCloud Photos, Telegram exports)
 - **Recognizes** faces using AWS Rekognition
+- **Remembers** what it's scanned (no duplicate processing)
+- **Learns** from your corrections (approve/reject matches)
 - **Organizes** photos into Apple Photos albums by person
 
 ## Quick Start
@@ -26,11 +28,14 @@ claude-book init
 #    Add 3-5 clear face photos to each folder
 claude-book train -r ./references
 
-# 3. Scan your photo library and create albums
+# 3. Scan your photo library
 claude-book scan -p ~/Pictures/Family
 
-# Photos are now organized into albums:
-#   "Claude Book: Mom", "Claude Book: Dad", etc.
+# 4. Review and correct any mistakes
+claude-book reject --person "Mom" --photo ~/Pictures/wrong_match.jpg
+
+# 5. Re-scan uses cache, so it's fast!
+claude-book scan -p ~/Pictures/Family
 ```
 
 ## Commands
@@ -39,34 +44,107 @@ claude-book scan -p ~/Pictures/Family
 |---------|-------------|
 | `claude-book init` | Initialize config and AWS Rekognition collection |
 | `claude-book train -r <path>` | Index faces from reference folders |
-| `claude-book scan -p <path>` | Scan photos and create Apple Photos albums |
+| `claude-book scan -p <path>` | Scan photos and create review albums |
 | `claude-book scan --dry-run` | Preview what albums would be created |
-| `claude-book status` | Show collection info and stats |
+| `claude-book scan --rescan` | Force re-scan of cached photos |
+| `claude-book approve` | Approve review albums and create final albums |
+| `claude-book approve --person "Name" --photo <path>` | Approve a specific recognition |
+| `claude-book reject --person "Name" --photo <path>` | Mark recognition as incorrect |
+| `claude-book add-match --person "Name" --photo <path>` | Manually add a missed recognition |
+| `claude-book status` | Show collection info and database stats |
 | `claude-book cleanup` | Remove AWS collection |
+
+## Photo Memory
+
+Claude Book remembers every photo it scans using a local SQLite database (`.claude-book.db`).
+
+### How It Works
+
+1. **SHA256 Hashing**: Each photo is identified by its content hash, not filename
+2. **Smart Caching**: Already-scanned photos use cached results (no AWS calls)
+3. **Move-Friendly**: Renamed or moved files are still recognized
+4. **Re-scan Option**: Use `--rescan` to force fresh recognition
+
+### Scan Output Example
+
+```
+$ claude-book scan -p ~/Photos
+
+Scanning |████████████████| 100% | 1234/1234 | Matched: 89 | Cached: 892
+
+Matches found:
+  Mom: 45 photos (avg 92.3% confidence)
+  Dad: 38 photos (avg 88.7% confidence)
+  Sister: 6 photos (avg 95.1% confidence)
+
+Cache stats: 892 from cache, 342 newly scanned
+```
+
+## Correcting Mistakes
+
+When face recognition makes mistakes, teach it:
+
+### False Positive (Wrong Match)
+
+If "Mom" was incorrectly detected in a photo:
+
+```bash
+claude-book reject --person "Mom" --photo ~/Photos/vacation/IMG_001.jpg
+```
+
+Future scans will exclude this match.
+
+### False Negative (Missed Detection)
+
+If "Dad" is in a photo but wasn't detected:
+
+```bash
+claude-book add-match --person "Dad" --photo ~/Photos/vacation/IMG_002.jpg
+```
+
+Future scans will include this match.
+
+### Confirming Correct Matches
+
+To mark a match as verified correct:
+
+```bash
+claude-book approve --person "Mom" --photo ~/Photos/vacation/IMG_003.jpg
+```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         CLI Layer                            │
-│  Commands: init | train | scan | status | cleanup           │
+│  init | train | scan | approve | reject | add-match | status │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      Core Pipeline                           │
-│  1. Scan photos → 2. Detect faces → 3. Match people         │
-│  4. Group by person → 5. Create Apple Photos albums         │
+│  1. Hash photo → 2. Check cache → 3. Detect faces            │
+│  4. Match people → 5. Apply corrections → 6. Create albums   │
 └─────────────────────────────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
 ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-│ Photo Sources │    │  Recognition  │    │ Album Export  │
+│ Photo Sources │    │  Recognition  │    │ Local Database│
 ├───────────────┤    ├───────────────┤    ├───────────────┤
-│ Local folders │    │ AWS           │    │ osxphotos     │
-│ iCloud Photos │    │ Rekognition   │    │ Apple Photos  │
+│ Local folders │    │ AWS           │    │ SQLite        │
+│ iCloud Photos │    │ Rekognition   │    │ Persons       │
+│ Telegram      │    │               │    │ Photos        │
+│               │    │               │    │ Corrections   │
 └───────────────┘    └───────────────┘    └───────────────┘
+                                                  │
+                                                  ▼
+                                          ┌───────────────┐
+                                          │ Album Export  │
+                                          ├───────────────┤
+                                          │ osxphotos     │
+                                          │ Apple Photos  │
+                                          └───────────────┘
 ```
 
 ### Data Flow
@@ -79,8 +157,8 @@ claude-book scan -p ~/Pictures/Family
 
 2. **Scanning Phase**
    ```
-   Photo Library → Detect Faces → Match Against Collection → Create Albums
-   ~/Pictures/*.jpg → faces found → "mom: 94%" → "Claude Book: Mom" album
+   Photo Library → Hash → Cache Check → Match Against Collection → Apply Corrections → Create Albums
+   ~/Pictures/*.jpg → SHA256 → cached? → "mom: 94%" → not rejected? → "Claude Book: Mom" album
    ```
 
 ### Multi-Person Photos
@@ -95,12 +173,14 @@ Photos with multiple recognized people are added to **all** matching albums:
 | **Bun** | Runtime - fast TypeScript execution |
 | **TypeScript** | Type-safe development |
 | **AWS Rekognition** | Face detection and recognition (~$1/1000 photos) |
+| **SQLite** | Local database for caching and corrections |
 | **osxphotos** | Apple Photos album creation |
 
 ### Dependencies
 
 ```
 @aws-sdk/client-rekognition  - AWS face recognition API
+better-sqlite3               - SQLite database for photo memory
 sharp                        - Image processing and resizing
 commander                    - CLI framework
 zod                          - Config validation
@@ -170,6 +250,23 @@ references/
 - 3-5 photos per person is usually sufficient
 - Avoid group photos for training
 
+## Database Files
+
+Claude Book creates these files in your project directory:
+
+| File | Purpose |
+|------|---------|
+| `.claude-book.db` | SQLite database with all scan data |
+| `.claude-book-review.json` | Temporary state for review workflow |
+| `config.yaml` | Your configuration |
+
+### Database Contents
+
+- **persons**: People from training (name, face count, photo count)
+- **photos**: Scanned photos with recognitions and corrections
+- **scans**: History of scan runs with statistics
+- **recognition_history**: Full audit trail of all recognitions
+
 ## iCloud Photos Integration
 
 iCloud Photos syncs to a local folder on macOS. Point claude-book at the Photos Library:
@@ -211,6 +308,28 @@ claude-book scan -p ~/Downloads/TelegramExport/photos
    # or: pip install osxphotos
    ```
 3. **Bun** runtime: https://bun.sh
+
+## Tuning Recognition
+
+### Too Many False Positives?
+
+Increase the confidence threshold in `config.yaml`:
+
+```yaml
+rekognition:
+  minConfidence: 90  # Higher = fewer but more accurate matches
+```
+
+### Missing Too Many Photos?
+
+Lower the confidence threshold:
+
+```yaml
+rekognition:
+  minConfidence: 70  # Lower = more matches, some may be wrong
+```
+
+Use `reject` command to fix any mistakes.
 
 ## License
 

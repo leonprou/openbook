@@ -1,14 +1,14 @@
 import { spawn } from "child_process";
+import { createLogger } from "../logger";
 
-export interface AlbumResult {
-  albumName: string;
-  photosAdded: number;
-  errors: string[];
-}
+const log = createLogger("albums");
 
-async function runOsxphotos(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+async function runCommand(
+  command: string,
+  args: string[]
+): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    const proc = spawn("osxphotos", args, {
+    const proc = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -33,6 +33,16 @@ async function runOsxphotos(args: string[]): Promise<{ stdout: string; stderr: s
   });
 }
 
+export interface AlbumResult {
+  albumName: string;
+  photosAdded: number;
+  errors: string[];
+}
+
+async function runOsxphotos(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+  return runCommand("osxphotos", args);
+}
+
 export async function checkOsxphotosInstalled(): Promise<boolean> {
   const result = await runOsxphotos(["--version"]);
   return result.code === 0;
@@ -49,19 +59,26 @@ export async function addPhotosToAlbum(
   };
 
   if (photoPaths.length === 0) {
+    log.debug({ albumName }, "No photos to add to album");
     return result;
   }
 
-  // osxphotos addalbum --album "Album Name" photo1.jpg photo2.jpg ...
+  log.debug({ albumName, photoCount: photoPaths.length }, "Adding photos to album");
+
+  // osxphotos import --album "Album Name" photo1.jpg photo2.jpg ...
   // Note: osxphotos will create the album if it doesn't exist
   const args = [
-    "addalbum",
+    "import",
     "--album",
     albumName,
     ...photoPaths,
   ];
 
+  log.debug({ command: "osxphotos", args: args.slice(0, 3), photoCount: photoPaths.length }, "Running osxphotos");
+
   const { stdout, stderr, code } = await runOsxphotos(args);
+
+  log.debug({ albumName, code, stdout: stdout.slice(0, 200), stderr: stderr.slice(0, 200) }, "osxphotos completed");
 
   if (code === 0) {
     // Parse output to count added photos
@@ -73,7 +90,9 @@ export async function addPhotosToAlbum(
       // Assume all photos were added if no count in output
       result.photosAdded = photoPaths.length;
     }
+    log.info({ albumName, photosAdded: result.photosAdded }, "Photos added to album");
   } else {
+    log.error({ albumName, code, stderr }, "Failed to add photos to album");
     result.errors.push(stderr || "Failed to add photos to album");
   }
 
@@ -83,12 +102,15 @@ export async function addPhotosToAlbum(
 export async function createAlbumsForPeople(
   personPhotos: Map<string, string[]>,
   albumPrefix: string,
-  dryRun: boolean = false
+  dryRun: boolean = false,
+  suffix: string = ""
 ): Promise<AlbumResult[]> {
   const results: AlbumResult[] = [];
 
   for (const [personName, photos] of personPhotos) {
-    const albumName = `${albumPrefix}: ${personName}`;
+    const albumName = suffix
+      ? `${albumPrefix}: ${personName} ${suffix}`
+      : `${albumPrefix}: ${personName}`;
 
     if (dryRun) {
       results.push({
@@ -104,4 +126,57 @@ export async function createAlbumsForPeople(
   }
 
   return results;
+}
+
+export interface AlbumPhoto {
+  uuid: string;
+  filename: string;
+  path: string;
+}
+
+export async function getAlbumPhotos(albumName: string): Promise<AlbumPhoto[]> {
+  log.debug({ albumName }, "Getting photos from album");
+
+  const args = [
+    "query",
+    "--album",
+    albumName,
+    "--json",
+  ];
+
+  const { stdout, stderr, code } = await runOsxphotos(args);
+
+  if (code !== 0) {
+    log.error({ albumName, stderr }, "Failed to query album");
+    return [];
+  }
+
+  try {
+    const photos = JSON.parse(stdout);
+    log.debug({ albumName, count: photos.length }, "Found photos in album");
+    return photos.map((p: any) => ({
+      uuid: p.uuid,
+      filename: p.filename,
+      path: p.path,
+    }));
+  } catch (error) {
+    log.error({ albumName, error }, "Failed to parse album photos");
+    return [];
+  }
+}
+
+export async function deleteAlbum(albumName: string): Promise<boolean> {
+  log.debug({ albumName }, "Deleting album");
+
+  // Use AppleScript to delete the album
+  const script = `tell application "Photos" to delete album "${albumName}"`;
+  const { code, stderr } = await runCommand("osascript", ["-e", script]);
+
+  if (code !== 0) {
+    log.error({ albumName, stderr }, "Failed to delete album");
+    return false;
+  }
+
+  log.info({ albumName }, "Album deleted");
+  return true;
 }

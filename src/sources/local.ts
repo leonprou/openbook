@@ -2,19 +2,36 @@ import { readdirSync, statSync } from "fs";
 import { join, extname, basename } from "path";
 import type { PhotoInfo, PhotoSource } from "./types";
 
+export interface LocalPhotoSourceOptions {
+  limit?: number;
+  filter?: RegExp;
+}
+
 export class LocalPhotoSource implements PhotoSource {
   name = "local";
   private paths: string[];
   private extensions: Set<string>;
+  private limit?: number;
+  private filter?: RegExp;
 
-  constructor(paths: string[], extensions: string[]) {
+  constructor(paths: string[], extensions: string[], options?: LocalPhotoSourceOptions) {
     this.paths = paths;
     this.extensions = new Set(extensions.map((e) => e.toLowerCase()));
+    this.limit = options?.limit;
+    this.filter = options?.filter;
   }
 
   async *scan(): AsyncGenerator<PhotoInfo> {
+    let yielded = 0;
     for (const basePath of this.paths) {
-      yield* this.scanDirectory(basePath);
+      for (const photo of this.scanDirectory(basePath)) {
+        // Apply limit
+        if (this.limit !== undefined && yielded >= this.limit) {
+          return;
+        }
+        yielded++;
+        yield photo;
+      }
     }
   }
 
@@ -48,6 +65,11 @@ export class LocalPhotoSource implements PhotoSource {
       } else if (entry.isFile()) {
         const ext = extname(entry.name).toLowerCase();
         if (this.extensions.has(ext)) {
+          // Apply filter (match against filename only)
+          if (this.filter && !this.filter.test(entry.name)) {
+            continue;
+          }
+
           try {
             const stats = statSync(fullPath);
             yield {
