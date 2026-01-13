@@ -9,6 +9,7 @@ import {
   createAlbumsForPeople,
 } from "../export/albums";
 import { existsSync, writeFileSync } from "fs";
+import { spawn } from "child_process";
 import { resolve, basename } from "path";
 import { homedir } from "os";
 import {
@@ -336,6 +337,15 @@ function getScanWithPhotos(scanId?: number): { scan: Scan; photos: IndexedPhoto[
 
 interface ScanListOptions {
   all?: boolean;
+  open?: boolean;
+}
+
+/**
+ * Open photos in macOS Preview
+ */
+function openPhotosInPreview(paths: string[]): void {
+  if (paths.length === 0) return;
+  spawn("open", paths, { detached: true, stdio: "ignore" });
 }
 
 /**
@@ -407,6 +417,13 @@ export async function scanListCommand(scanId?: string, options: ScanListOptions 
       console.log(`[${photo.index}] ${photo.path}`);
       console.log(`     (no matches)`);
     }
+  }
+
+  // Open photos in Preview if requested
+  if (options.open && photosToShow.length > 0) {
+    const paths = photosToShow.map(p => p.path);
+    openPhotosInPreview(paths);
+    console.log(`\nOpened ${paths.length} photos in Preview.`);
   }
 
   console.log();
