@@ -322,6 +322,35 @@ export function getLastScan(): Scan | null {
   };
 }
 
+export function getScanById(scanId: number): Scan | null {
+  const database = getDb();
+  const stmt = database.query(`
+    SELECT * FROM scans
+    WHERE id = $scanId
+  `);
+  const row = stmt.get({ $scanId: scanId }) as {
+    id: number;
+    started_at: string;
+    completed_at: string | null;
+    source_paths: string | null;
+    photos_processed: number;
+    photos_cached: number;
+    matches_found: number;
+  } | null;
+
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    sourcePaths: row.source_paths ? JSON.parse(row.source_paths) : [],
+    photosProcessed: row.photos_processed,
+    photosCached: row.photos_cached,
+    matchesFound: row.matches_found,
+  };
+}
+
 export function getRecentScans(limit: number = 5): Scan[] {
   const database = getDb();
   const stmt = database.query(`

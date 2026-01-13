@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import { initCommand } from "./commands/init";
 import { trainCommand } from "./commands/train";
-import { scanCommand } from "./commands/scan";
+import { scanCommand, scanListCommand, scanApproveCommand } from "./commands/scan";
 import {
   approveCommand,
   approveMatchCommand,
@@ -11,7 +11,6 @@ import {
   addMatchCommand,
 } from "./commands/approve";
 import { statusCommand } from "./commands/status";
-import { listCommand } from "./commands/list";
 import { cleanupCommand } from "./commands/cleanup";
 
 const program = new Command();
@@ -32,8 +31,13 @@ program
   .option("-r, --references <path>", "Path to references folder")
   .action(trainCommand);
 
-program
+// Scan command with subcommands
+const scan = program
   .command("scan")
+  .description("Scan photos and manage scan results");
+
+scan
+  .command("run")
   .description("Scan photos and create review albums")
   .argument("[path]", "Path to scan")
   .option("-s, --source <type>", "Source type (local)", "local")
@@ -44,6 +48,20 @@ program
   .option("-f, --filter <regex>", "Filter files by regex pattern (matches filename)")
   .option("-v, --verbose", "Show list of scanned files")
   .action((path, options) => scanCommand({ ...options, path: path || options.path }));
+
+scan
+  .command("list")
+  .description("List photos from a scan (defaults to latest)")
+  .argument("[scanId]", "Scan ID (defaults to latest scan)")
+  .action((scanId) => scanListCommand(scanId));
+
+scan
+  .command("approve")
+  .description("Approve/reject photos from a scan")
+  .argument("[scanId]", "Scan ID (defaults to latest scan)")
+  .option("--reject <indexes>", "Comma-separated photo indexes to reject (rest approved)")
+  .option("--photos <indexes>", "Comma-separated photo indexes to approve (only these)")
+  .action((scanId, options) => scanApproveCommand(scanId, options));
 
 program
   .command("approve")
@@ -76,11 +94,6 @@ program
   .command("status")
   .description("Show collection info and stats")
   .action(statusCommand);
-
-program
-  .command("list")
-  .description("List photos from the latest scan")
-  .action(listCommand);
 
 program
   .command("cleanup")

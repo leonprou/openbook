@@ -16,7 +16,15 @@ import {
   createScan,
   completeScan,
   updateAllPersonPhotoCounts,
+  getLastScan,
+  getScanById,
+  getPhotosByScan,
+  addCorrection,
+  type Photo,
+  type Scan,
 } from "../db";
+import { loadConfig as loadConfigForApprove } from "../config";
+import { addPhotosToAlbum } from "../export/albums";
 
 const REVIEW_STATE_FILE = ".claude-book-review.json";
 const REVIEW_SUFFIX = "(Review)";
@@ -301,4 +309,249 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   console.log("  2. Remove any incorrect photos from the review albums");
   console.log("  3. Run 'claude-book approve' to approve correct matches");
   console.log("  4. Run 'claude-book reject' to mark false positives");
+}
+
+/**
+ * Photo with index for list/approve commands
+ */
+export interface IndexedPhoto extends Photo {
+  index: number;
+}
+
+/**
+ * Get scan and its photos with indexes
+ */
+function getScanWithPhotos(scanId?: number): { scan: Scan; photos: IndexedPhoto[] } | null {
+  const scan = scanId ? getScanById(scanId) : getLastScan();
+  if (!scan) return null;
+
+  const photos = getPhotosByScan(scan.id);
+  const indexedPhotos: IndexedPhoto[] = photos.map((photo, idx) => ({
+    ...photo,
+    index: idx + 1, // 1-based indexing
+  }));
+
+  return { scan, photos: indexedPhotos };
+}
+
+/**
+ * scan list - Show details about a scan
+ */
+export async function scanListCommand(scanId?: string): Promise<void> {
+  try {
+    initDatabase();
+  } catch {
+    console.log("Database not initialized. Run 'claude-book scan run' first.");
+    return;
+  }
+
+  const parsedId = scanId ? parseInt(scanId, 10) : undefined;
+  if (scanId && isNaN(parsedId!)) {
+    console.error(`Invalid scan ID: ${scanId}`);
+    process.exit(1);
+  }
+
+  const result = getScanWithPhotos(parsedId);
+  if (!result) {
+    if (scanId) {
+      console.log(`Scan #${scanId} not found.`);
+    } else {
+      console.log("No scans found. Run 'claude-book scan run' first.");
+    }
+    return;
+  }
+
+  const { scan, photos } = result;
+
+  // Print scan info header
+  const date = new Date(scan.startedAt);
+  console.log(`Scan #${scan.id} (${date.toLocaleDateString()})`);
+  if (scan.sourcePaths.length > 0) {
+    console.log(`Path: ${scan.sourcePaths.join(", ")}`);
+  }
+  console.log(`Photos: ${scan.photosProcessed} processed, ${scan.matchesFound} with matches`);
+  console.log();
+
+  if (photos.length === 0) {
+    console.log("No photos found in this scan.");
+    return;
+  }
+
+  // Filter to only photos with matches
+  const photosWithMatches = photos.filter(p => p.recognitions.length > 0);
+
+  if (photosWithMatches.length === 0) {
+    console.log("No matches found in this scan.");
+    console.log(`(${photos.length} photos scanned with no face matches)`);
+    return;
+  }
+
+  console.log(`Photos with matches (${photosWithMatches.length}):`);
+  console.log();
+
+  // Print each photo with matches
+  for (const photo of photosWithMatches) {
+    const matches = photo.recognitions
+      .map((r) => `${r.personName} (${Math.round(r.confidence)}%)`)
+      .join(", ");
+    console.log(`[${photo.index}] ${photo.path}`);
+    console.log(`     ${matches}`);
+  }
+
+  console.log();
+  console.log("To approve photos: claude-book scan approve [scanId] --reject <indexes>");
+  console.log("To approve specific: claude-book scan approve --photos <indexes>");
+}
+
+interface ScanApproveOptions {
+  reject?: string;  // comma-separated indexes to reject
+  photos?: string;  // comma-separated indexes to approve
+}
+
+/**
+ * Parse comma-separated indexes string into number array
+ */
+function parseIndexes(str: string): number[] {
+  return str
+    .split(",")
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => !isNaN(n));
+}
+
+/**
+ * scan approve - Approve/reject photos from a scan
+ */
+export async function scanApproveCommand(
+  scanId: string | undefined,
+  options: ScanApproveOptions
+): Promise<void> {
+  try {
+    initDatabase();
+  } catch {
+    console.log("Database not initialized. Run 'claude-book scan run' first.");
+    return;
+  }
+
+  const parsedScanId = scanId ? parseInt(scanId, 10) : undefined;
+  if (scanId && isNaN(parsedScanId!)) {
+    console.error(`Invalid scan ID: ${scanId}`);
+    process.exit(1);
+  }
+
+  const result = getScanWithPhotos(parsedScanId);
+  if (!result) {
+    if (scanId) {
+      console.log(`Scan #${scanId} not found.`);
+    } else {
+      console.log("No scans found. Run 'claude-book scan run' first.");
+    }
+    return;
+  }
+
+  const { scan, photos } = result;
+
+  // Filter to photos with matches
+  const photosWithMatches = photos.filter(p => p.recognitions.length > 0);
+
+  if (photosWithMatches.length === 0) {
+    console.log("No photos with matches in this scan.");
+    return;
+  }
+
+  // Determine which photos to approve/reject
+  let toApprove: IndexedPhoto[];
+  let toReject: IndexedPhoto[];
+
+  if (options.photos) {
+    // Approve only specific indexes
+    const approveIndexes = new Set(parseIndexes(options.photos));
+    toApprove = photosWithMatches.filter((p) => approveIndexes.has(p.index));
+    toReject = [];
+  } else if (options.reject) {
+    // Approve all except specified indexes
+    const rejectIndexes = new Set(parseIndexes(options.reject));
+    toApprove = photosWithMatches.filter((p) => !rejectIndexes.has(p.index));
+    toReject = photosWithMatches.filter((p) => rejectIndexes.has(p.index));
+  } else {
+    // Approve all photos
+    toApprove = photosWithMatches;
+    toReject = [];
+  }
+
+  if (toApprove.length === 0 && toReject.length === 0) {
+    console.log("No photos to process. Check your indexes.");
+    return;
+  }
+
+  console.log(`Scan #${scan.id}:`);
+  console.log(`  Approving: ${toApprove.length} photos`);
+  if (toReject.length > 0) {
+    console.log(`  Rejecting: ${toReject.length} photos`);
+  }
+  console.log();
+
+  // Apply corrections
+  let approvedCount = 0;
+  let rejectedCount = 0;
+
+  for (const photo of toApprove) {
+    for (const recognition of photo.recognitions) {
+      const success = addCorrection(
+        photo.hash,
+        recognition.personId,
+        recognition.personName,
+        "approved"
+      );
+      if (success) approvedCount++;
+    }
+  }
+
+  for (const photo of toReject) {
+    for (const recognition of photo.recognitions) {
+      const success = addCorrection(
+        photo.hash,
+        recognition.personId,
+        recognition.personName,
+        "false_positive"
+      );
+      if (success) rejectedCount++;
+    }
+  }
+
+  console.log(`Corrections recorded:`);
+  console.log(`  ${approvedCount} approved`);
+  if (rejectedCount > 0) {
+    console.log(`  ${rejectedCount} rejected`);
+  }
+
+  // Create albums for approved photos
+  if (toApprove.length > 0) {
+    const config = loadConfigForApprove();
+    const personPhotos = new Map<string, string[]>();
+
+    for (const photo of toApprove) {
+      for (const recognition of photo.recognitions) {
+        const existing = personPhotos.get(recognition.personName) ?? [];
+        existing.push(photo.path);
+        personPhotos.set(recognition.personName, existing);
+      }
+    }
+
+    console.log();
+    console.log("Creating albums...");
+
+    for (const [personName, photoPaths] of personPhotos) {
+      const albumName = `${config.albums.prefix}: ${personName}`;
+      const result = await addPhotosToAlbum(albumName, photoPaths);
+
+      if (result.errors.length === 0) {
+        console.log(`  ✓ "${albumName}": ${result.photosAdded} photos`);
+      } else {
+        console.log(`  ✗ "${albumName}": ${result.errors.join(", ")}`);
+      }
+    }
+  }
+
+  console.log();
+  console.log("Done!");
 }
