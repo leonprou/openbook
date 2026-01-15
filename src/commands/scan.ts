@@ -19,6 +19,7 @@ import {
   updateAllPersonPhotoCounts,
   getLastScan,
   getScanById,
+  getRecentScans,
   getPhotosByScan,
   addCorrection,
   type Photo,
@@ -80,6 +81,17 @@ function calculateAvgConfidence(matches: PhotoMatch[]): number {
 export async function scanCommand(options: ScanOptions): Promise<void> {
   const config = loadConfig();
   const spinner = ora();
+
+  // Deprecation warning for old syntax
+  if (options.path && !process.argv.includes(options.path)) {
+    // Only show if -p was used (not positional)
+    const hasPathFlag = process.argv.includes("-p") || process.argv.includes("--path");
+    if (hasPathFlag) {
+      console.warn("Warning: -p/--path is deprecated. Use positional argument instead:");
+      console.warn("  claude-book scan <path>");
+      console.warn("");
+    }
+  }
 
   // Initialize database
   spinner.start("Initializing database...");
@@ -234,33 +246,46 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   // Update person photo counts
   updateAllPersonPhotoCounts();
 
-  // Summary of found matches
-  if (personPhotos.size === 0) {
-    console.log("\nNo faces matched. Try:");
-    console.log("  - Adding more reference photos");
-    console.log("  - Lowering minConfidence in config.yaml");
+  // Show cache stats
+  console.log(`\nCache stats: ${stats.photosCached} from cache, ${stats.photosProcessed - stats.photosCached} newly scanned`);
+
+  // Filter to only NEW photos (not from cache) for summary and album creation
+  const newPersonPhotos = new Map<string, PhotoMatch[]>();
+  for (const [person, matches] of personPhotos) {
+    const newPhotos = matches.filter(m => !m.fromCache);
+    if (newPhotos.length > 0) {
+      newPersonPhotos.set(person, newPhotos);
+    }
+  }
+
+  // Summary of new matches only
+  if (newPersonPhotos.size === 0) {
+    if (stats.photosCached > 0) {
+      console.log("\nNo new faces matched (all photos were cached).");
+    } else {
+      console.log("\nNo faces matched. Try:");
+      console.log("  - Adding more reference photos");
+      console.log("  - Lowering minConfidence in config.yaml");
+    }
     return;
   }
 
-  console.log("\nMatches found:");
-  for (const [person, matches] of personPhotos) {
+  console.log("\nNew matches found:");
+  for (const [person, matches] of newPersonPhotos) {
     const avgConfidence = calculateAvgConfidence(matches);
     console.log(`  ${person}: ${matches.length} photos (avg ${avgConfidence.toFixed(1)}% confidence)`);
   }
 
-  // Show cache stats
-  console.log(`\nCache stats: ${stats.photosCached} from cache, ${stats.photosProcessed - stats.photosCached} newly scanned`);
-
-  // Convert PhotoMatch[] to string[] for album creation
+  // Convert to paths for album creation
   const personPhotoPaths = new Map<string, string[]>();
-  for (const [person, matches] of personPhotos) {
+  for (const [person, matches] of newPersonPhotos) {
     personPhotoPaths.set(person, matches.map(m => m.photoPath));
   }
 
   // Create review albums
   if (options.dryRun) {
     console.log("\n[Dry run] Would create review albums:");
-    for (const [person, matches] of personPhotos) {
+    for (const [person, matches] of newPersonPhotos) {
       const avgConfidence = calculateAvgConfidence(matches);
       console.log(`  "${config.albums.prefix}: ${person} ${REVIEW_SUFFIX}" (${matches.length} photos, avg ${avgConfidence.toFixed(1)}%)`);
     }
@@ -313,34 +338,6 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 }
 
 /**
- * Photo with index for list/approve commands
- */
-export interface IndexedPhoto extends Photo {
-  index: number;
-}
-
-/**
- * Get scan and its photos with indexes
- */
-function getScanWithPhotos(scanId?: number): { scan: Scan; photos: IndexedPhoto[] } | null {
-  const scan = scanId ? getScanById(scanId) : getLastScan();
-  if (!scan) return null;
-
-  const photos = getPhotosByScan(scan.id);
-  const indexedPhotos: IndexedPhoto[] = photos.map((photo, idx) => ({
-    ...photo,
-    index: idx + 1, // 1-based indexing
-  }));
-
-  return { scan, photos: indexedPhotos };
-}
-
-interface ScanListOptions {
-  all?: boolean;
-  open?: boolean;
-}
-
-/**
  * Open photos in macOS Preview
  */
 function openPhotosInPreview(paths: string[]): void {
@@ -348,238 +345,160 @@ function openPhotosInPreview(paths: string[]): void {
   spawn("open", paths, { detached: true, stdio: "ignore" });
 }
 
+interface ScanListHistoryOptions {
+  limit?: number;
+  all?: boolean;
+  open?: boolean;
+  json?: boolean;
+}
+
 /**
- * scan list - Show details about a scan
+ * scan list - Show scan history
  */
-export async function scanListCommand(scanId?: string, options: ScanListOptions = {}): Promise<void> {
+export async function scanListHistoryCommand(options: ScanListHistoryOptions = {}): Promise<void> {
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan run' first.");
+    console.log("Database not initialized. Run 'claude-book scan' first.");
     return;
   }
 
-  const parsedId = scanId ? parseInt(scanId, 10) : undefined;
-  if (scanId && isNaN(parsedId!)) {
+  const limit = options.limit ?? 10;
+  const scans = getRecentScans(limit);
+
+  if (scans.length === 0) {
+    console.log("No scans found. Run 'claude-book scan <path>' first.");
+    return;
+  }
+
+  // Filter out scans with no matches unless --all
+  const scansToShow = options.all ? scans : scans.filter(s => s.matchesFound > 0);
+
+  if (scansToShow.length === 0) {
+    console.log("No scans with matches found.");
+    console.log("Use --all to show all scans.");
+    return;
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(scansToShow, null, 2));
+    return;
+  }
+
+  // Table header
+  console.log("ID   Date                 Photos   Matches  New    Source");
+  console.log("─".repeat(75));
+
+  for (const scan of scansToShow) {
+    const date = new Date(scan.startedAt);
+    const dateStr = date.toLocaleString();
+    const newScans = scan.photosProcessed - scan.photosCached;
+    const source = scan.sourcePaths.length > 0
+      ? scan.sourcePaths[0].replace(homedir(), "~")
+      : "(unknown)";
+    const truncatedSource = source.length > 30 ? source.slice(0, 27) + "..." : source;
+
+    console.log(
+      `${String(scan.id).padEnd(5)}${dateStr.padEnd(21)}${String(scan.photosProcessed).padEnd(9)}${String(scan.matchesFound).padEnd(9)}${String(newScans).padEnd(7)}${truncatedSource}`
+    );
+  }
+
+  // Open photos from latest scan if requested
+  if (options.open && scansToShow.length > 0) {
+    const latestScan = scansToShow[0];
+    const photos = getPhotosByScan(latestScan.id);
+    const photosWithMatches = photos.filter(p => p.recognitions.length > 0);
+
+    if (photosWithMatches.length > 0) {
+      const paths = photosWithMatches.map(p => p.path);
+      openPhotosInPreview(paths);
+      console.log(`\nOpened ${paths.length} photos from scan #${latestScan.id} in Preview.`);
+    }
+  }
+
+  console.log();
+  console.log("Use 'claude-book scan show <id>' to view scan details.");
+  console.log("Use 'claude-book photos --scan <id>' to manage photos from a scan.");
+}
+
+interface ScanShowOptions {
+  open?: boolean;
+  json?: boolean;
+}
+
+/**
+ * scan show <id> - Show details for a specific scan
+ */
+export async function scanShowCommand(scanId: string, options: ScanShowOptions = {}): Promise<void> {
+  try {
+    initDatabase();
+  } catch {
+    console.log("Database not initialized. Run 'claude-book scan' first.");
+    return;
+  }
+
+  const parsedId = parseInt(scanId, 10);
+  if (isNaN(parsedId)) {
     console.error(`Invalid scan ID: ${scanId}`);
     process.exit(1);
   }
 
-  const result = getScanWithPhotos(parsedId);
-  if (!result) {
-    if (scanId) {
-      console.log(`Scan #${scanId} not found.`);
-    } else {
-      console.log("No scans found. Run 'claude-book scan run' first.");
-    }
+  const scan = getScanById(parsedId);
+  if (!scan) {
+    console.log(`Scan #${scanId} not found.`);
     return;
   }
 
-  const { scan, photos } = result;
+  const photos = getPhotosByScan(scan.id);
+  const photosWithMatches = photos.filter(p => p.recognitions.length > 0);
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      scan,
+      photos: photosWithMatches.map((p, idx) => ({
+        index: idx + 1,
+        path: p.path,
+        hash: p.hash,
+        recognitions: p.recognitions,
+        corrections: p.corrections,
+      })),
+    }, null, 2));
+    return;
+  }
 
   // Print scan info header
   const date = new Date(scan.startedAt);
-  console.log(`Scan #${scan.id} (${date.toLocaleDateString()})`);
+  console.log(`Scan #${scan.id} (${date.toLocaleString()})`);
   if (scan.sourcePaths.length > 0) {
     console.log(`Path: ${scan.sourcePaths.join(", ")}`);
   }
   console.log(`Photos: ${scan.photosProcessed} processed, ${scan.matchesFound} with matches`);
   console.log();
 
-  if (photos.length === 0) {
-    console.log("No photos found in this scan.");
-    return;
-  }
-
-  // Show all photos or only those with matches
-  const photosToShow = options.all ? photos : photos.filter(p => p.recognitions.length > 0);
-
-  if (photosToShow.length === 0) {
+  if (photosWithMatches.length === 0) {
     console.log("No matches found in this scan.");
-    console.log(`(${photos.length} photos scanned with no face matches)`);
-    console.log("\nUse --all to show all photos.");
     return;
   }
 
-  const label = options.all ? "All photos" : "Photos with matches";
-  console.log(`${label} (${photosToShow.length}):`);
+  console.log(`Photos with matches (${photosWithMatches.length}):`);
   console.log();
 
-  // Print each photo
-  for (const photo of photosToShow) {
-    if (photo.recognitions.length > 0) {
-      const matches = photo.recognitions
-        .map((r) => `${r.personName} (${Math.round(r.confidence)}%)`)
-        .join(", ");
-      console.log(`[${photo.index}] ${photo.path}`);
-      console.log(`     ${matches}`);
-    } else {
-      console.log(`[${photo.index}] ${photo.path}`);
-      console.log(`     (no matches)`);
-    }
-  }
+  // Print each photo with index
+  photosWithMatches.forEach((photo, idx) => {
+    const matches = photo.recognitions
+      .map((r) => `${r.personName} (${Math.round(r.confidence)}%)`)
+      .join(", ");
+    console.log(`[${idx + 1}] ${photo.path}`);
+    console.log(`     ${matches}`);
+  });
 
   // Open photos in Preview if requested
-  if (options.open && photosToShow.length > 0) {
-    const paths = photosToShow.map(p => p.path);
+  if (options.open && photosWithMatches.length > 0) {
+    const paths = photosWithMatches.map(p => p.path);
     openPhotosInPreview(paths);
     console.log(`\nOpened ${paths.length} photos in Preview.`);
   }
 
   console.log();
-  console.log("To approve photos: claude-book scan approve [scanId] --reject <indexes>");
-  console.log("To approve specific: claude-book scan approve --photos <indexes>");
-}
-
-interface ScanApproveOptions {
-  reject?: string;  // comma-separated indexes to reject
-  photos?: string;  // comma-separated indexes to approve
-}
-
-/**
- * Parse comma-separated indexes string into number array
- */
-function parseIndexes(str: string): number[] {
-  return str
-    .split(",")
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !isNaN(n));
-}
-
-/**
- * scan approve - Approve/reject photos from a scan
- */
-export async function scanApproveCommand(
-  scanId: string | undefined,
-  options: ScanApproveOptions
-): Promise<void> {
-  try {
-    initDatabase();
-  } catch {
-    console.log("Database not initialized. Run 'claude-book scan run' first.");
-    return;
-  }
-
-  const parsedScanId = scanId ? parseInt(scanId, 10) : undefined;
-  if (scanId && isNaN(parsedScanId!)) {
-    console.error(`Invalid scan ID: ${scanId}`);
-    process.exit(1);
-  }
-
-  const result = getScanWithPhotos(parsedScanId);
-  if (!result) {
-    if (scanId) {
-      console.log(`Scan #${scanId} not found.`);
-    } else {
-      console.log("No scans found. Run 'claude-book scan run' first.");
-    }
-    return;
-  }
-
-  const { scan, photos } = result;
-
-  // Filter to photos with matches
-  const photosWithMatches = photos.filter(p => p.recognitions.length > 0);
-
-  if (photosWithMatches.length === 0) {
-    console.log("No photos with matches in this scan.");
-    return;
-  }
-
-  // Determine which photos to approve/reject
-  let toApprove: IndexedPhoto[];
-  let toReject: IndexedPhoto[];
-
-  if (options.photos) {
-    // Approve only specific indexes
-    const approveIndexes = new Set(parseIndexes(options.photos));
-    toApprove = photosWithMatches.filter((p) => approveIndexes.has(p.index));
-    toReject = [];
-  } else if (options.reject) {
-    // Approve all except specified indexes
-    const rejectIndexes = new Set(parseIndexes(options.reject));
-    toApprove = photosWithMatches.filter((p) => !rejectIndexes.has(p.index));
-    toReject = photosWithMatches.filter((p) => rejectIndexes.has(p.index));
-  } else {
-    // Approve all photos
-    toApprove = photosWithMatches;
-    toReject = [];
-  }
-
-  if (toApprove.length === 0 && toReject.length === 0) {
-    console.log("No photos to process. Check your indexes.");
-    return;
-  }
-
-  console.log(`Scan #${scan.id}:`);
-  console.log(`  Approving: ${toApprove.length} photos`);
-  if (toReject.length > 0) {
-    console.log(`  Rejecting: ${toReject.length} photos`);
-  }
-  console.log();
-
-  // Apply corrections
-  let approvedCount = 0;
-  let rejectedCount = 0;
-
-  for (const photo of toApprove) {
-    for (const recognition of photo.recognitions) {
-      const success = addCorrection(
-        photo.hash,
-        recognition.personId,
-        recognition.personName,
-        "approved"
-      );
-      if (success) approvedCount++;
-    }
-  }
-
-  for (const photo of toReject) {
-    for (const recognition of photo.recognitions) {
-      const success = addCorrection(
-        photo.hash,
-        recognition.personId,
-        recognition.personName,
-        "false_positive"
-      );
-      if (success) rejectedCount++;
-    }
-  }
-
-  console.log(`Corrections recorded:`);
-  console.log(`  ${approvedCount} approved`);
-  if (rejectedCount > 0) {
-    console.log(`  ${rejectedCount} rejected`);
-  }
-
-  // Create albums for approved photos
-  if (toApprove.length > 0) {
-    const config = loadConfigForApprove();
-    const personPhotos = new Map<string, string[]>();
-
-    for (const photo of toApprove) {
-      for (const recognition of photo.recognitions) {
-        const existing = personPhotos.get(recognition.personName) ?? [];
-        existing.push(photo.path);
-        personPhotos.set(recognition.personName, existing);
-      }
-    }
-
-    console.log();
-    console.log("Creating albums...");
-
-    for (const [personName, photoPaths] of personPhotos) {
-      const albumName = `${config.albums.prefix}: ${personName}`;
-      const result = await addPhotosToAlbum(albumName, photoPaths);
-
-      if (result.errors.length === 0) {
-        console.log(`  ✓ "${albumName}": ${result.photosAdded} photos`);
-      } else {
-        console.log(`  ✗ "${albumName}": ${result.errors.join(", ")}`);
-      }
-    }
-  }
-
-  console.log();
-  console.log("Done!");
+  console.log("Use 'claude-book photos --scan " + scan.id + "' to manage these photos.");
 }

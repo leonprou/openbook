@@ -19,19 +19,61 @@ bun run start <command>
 
 ## CLI Commands
 
+### Setup Commands
+
 | Command | Description |
 |---------|-------------|
 | `claude-book init` | Initialize config and AWS Rekognition collection |
-| `claude-book train -r <path>` | Index faces from reference folders |
-| `claude-book scan -p <path>` | Scan photos and create Apple Photos albums |
-| `claude-book scan --dry-run` | Preview what albums would be created |
-| `claude-book scan --rescan` | Force re-scan of cached photos |
-| `claude-book approve` | Approve review albums and create final albums |
-| `claude-book approve --person "Mom" --photo <path>` | Approve a specific recognition |
-| `claude-book reject --person "Mom" --photo <path>` | Mark recognition as false positive |
-| `claude-book add-match --person "Mom" --photo <path>` | Manually add missed recognition |
 | `claude-book status` | Show collection info and stats |
-| `claude-book cleanup` | Remove AWS collection |
+| `claude-book cleanup [--force]` | Remove AWS collection |
+
+### Training Commands
+
+| Command | Description |
+|---------|-------------|
+| `claude-book train <path>` | Index faces from reference folders |
+| `claude-book train` | Use path from config.yaml |
+
+### Scan Commands
+
+| Command | Description |
+|---------|-------------|
+| `claude-book scan <path>` | Scan photos at path |
+| `claude-book scan` | Use paths from config.yaml |
+| `claude-book scan --dry-run` | Preview without making changes |
+| `claude-book scan --rescan` | Force re-scan of cached photos |
+| `claude-book scan list` | List recent scans with stats |
+| `claude-book scan show <id>` | Show details for a specific scan |
+
+### Photos Commands
+
+| Command | Description |
+|---------|-------------|
+| `claude-book photos` | List photos (default: approved) |
+| `claude-book photos --person "Mom"` | Filter by person |
+| `claude-book photos --status pending` | Filter by status |
+| `claude-book photos --scan 15` | Filter by scan ID |
+| `claude-book photos --open` | Open results in Preview |
+| `claude-book photos --json` | Output as JSON |
+| `claude-book photos approve <indexes>` | Approve by index (1,2,4-6) |
+| `claude-book photos approve --all` | Approve all in current list |
+| `claude-book photos approve --all --without 3,5` | Approve all except indexes |
+| `claude-book photos approve <person> <path>` | Approve specific photo |
+| `claude-book photos reject <indexes>` | Reject by index |
+| `claude-book photos reject --max-confidence 60` | Reject low-confidence matches |
+| `claude-book photos add <person> <path>` | Manually add person to photo |
+| `claude-book photos export` | Export all approved to Apple Photos |
+| `claude-book photos export --person "Mom"` | Export for specific person |
+
+### Photo Status Values
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Recognized, not reviewed |
+| `approved` | Confirmed correct |
+| `rejected` | Marked as false positive |
+| `manual` | Manually added (false negative correction) |
+| `all` | Show all statuses |
 
 ## Tech Stack
 
@@ -66,7 +108,7 @@ src/
 │   ├── init.ts           # Initialize config and AWS collection
 │   ├── train.ts          # Index reference faces
 │   ├── scan.ts           # Scan photos and match faces
-│   ├── approve.ts        # Approve/reject/add-match corrections
+│   ├── photos.ts         # Photo listing, approve/reject, export
 │   ├── status.ts         # Show collection stats
 │   └── cleanup.ts        # Remove AWS collection
 ├── pipeline/
@@ -165,6 +207,25 @@ Three types of corrections:
 To validate training worked correctly:
 
 1. **Check status**: `claude-book status` - shows indexed face count and database stats
-2. **Test scan**: `claude-book scan -p ./test-photos --dry-run`
+2. **Test scan**: `claude-book scan ./test-photos --dry-run`
 3. **Adjust confidence**: Lower `minConfidence` for more matches, higher for fewer false positives
-4. **Review corrections**: Use `reject` and `add-match` commands to improve accuracy
+4. **Review corrections**: Use `photos reject` and `photos add` commands to improve accuracy
+
+## Workflow Example
+
+```bash
+# 1. Scan new photos
+claude-book scan ~/Pictures/Recent
+
+# 2. Review pending photos from the scan
+claude-book photos --scan 15 --status pending --open
+
+# 3. Approve all except wrong ones
+claude-book photos approve --all --without 3,7,12
+
+# 4. Clean up low-confidence matches
+claude-book photos reject --max-confidence 60
+
+# 5. Export approved to Apple Photos
+claude-book photos export
+```

@@ -9,9 +9,20 @@ interface TrainOptions {
   references?: string;
 }
 
-export async function trainCommand(options: TrainOptions): Promise<void> {
+export async function trainCommand(
+  path?: string,
+  options: TrainOptions = {}
+): Promise<void> {
   const config = loadConfig();
-  const referencesPath = options.references ?? config.training.referencesPath;
+
+  // Deprecation warning for old syntax
+  if (options.references) {
+    console.warn("Warning: -r/--references is deprecated. Use positional argument instead:");
+    console.warn("  claude-book train <path>");
+    console.warn("");
+  }
+
+  const referencesPath = path ?? options.references ?? config.training.referencesPath;
 
   const spinner = ora();
 

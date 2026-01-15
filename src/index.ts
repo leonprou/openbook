@@ -3,13 +3,18 @@
 import { Command } from "commander";
 import { initCommand } from "./commands/init";
 import { trainCommand } from "./commands/train";
-import { scanCommand, scanListCommand, scanApproveCommand } from "./commands/scan";
 import {
-  approveCommand,
-  approveMatchCommand,
-  rejectMatchCommand,
-  addMatchCommand,
-} from "./commands/approve";
+  scanCommand,
+  scanListHistoryCommand,
+  scanShowCommand,
+} from "./commands/scan";
+import {
+  photosListCommand,
+  photosApproveCommand,
+  photosRejectCommand,
+  photosAddCommand,
+  photosExportCommand,
+} from "./commands/photos";
 import { statusCommand } from "./commands/status";
 import { cleanupCommand } from "./commands/cleanup";
 
@@ -25,23 +30,20 @@ program
   .description("Initialize config and AWS Rekognition collection")
   .action(initCommand);
 
+// Train command with positional path
 program
   .command("train")
   .description("Index faces from reference folders")
-  .option("-r, --references <path>", "Path to references folder")
+  .argument("[path]", "Path to references folder")
+  .option("-r, --references <path>", "Path to references folder (deprecated, use positional)")
   .action(trainCommand);
 
-// Scan command with subcommands
+// Scan command - primary action is scanning, subcommands for history
 const scan = program
   .command("scan")
-  .description("Scan photos and manage scan results");
-
-scan
-  .command("run")
-  .description("Scan photos and create review albums")
+  .description("Scan photos and manage scan history")
   .argument("[path]", "Path to scan")
-  .option("-s, --source <type>", "Source type (local)", "local")
-  .option("-p, --path <path>", "Path to scan (alternative to argument)")
+  .option("-p, --path <path>", "Path to scan (deprecated, use positional)")
   .option("--dry-run", "Show what would be done without making changes")
   .option("--rescan", "Force re-scan of cached photos")
   .option("-l, --limit <number>", "Limit number of new photos to scan", parseInt)
@@ -51,46 +53,69 @@ scan
 
 scan
   .command("list")
-  .description("List photos from a scan (defaults to latest)")
-  .argument("[scanId]", "Scan ID (defaults to latest scan)")
-  .option("-a, --all", "Show all photos, not just those with matches")
-  .option("-o, --open", "Open photos in Preview")
-  .action((scanId, options) => scanListCommand(scanId, options));
+  .description("List recent scans with stats")
+  .option("-l, --limit <number>", "Number of scans to show", parseInt)
+  .option("-a, --all", "Show all scans including those with no matches")
+  .option("-o, --open", "Open photos from latest scan in Preview")
+  .option("--json", "Output as JSON")
+  .action(scanListHistoryCommand);
 
 scan
-  .command("approve")
-  .description("Approve/reject photos from a scan")
-  .argument("[scanId]", "Scan ID (defaults to latest scan)")
-  .option("--reject <indexes>", "Comma-separated photo indexes to reject (rest approved)")
-  .option("--photos <indexes>", "Comma-separated photo indexes to approve (only these)")
-  .action((scanId, options) => scanApproveCommand(scanId, options));
+  .command("show")
+  .description("Show details for a specific scan")
+  .argument("<id>", "Scan ID")
+  .option("-o, --open", "Open photos in Preview")
+  .option("--json", "Output as JSON")
+  .action(scanShowCommand);
 
-program
-  .command("approve")
-  .description("Approve review albums and move photos to final albums")
-  .option("--person <name>", "Person name to approve match for")
-  .option("--photo <path>", "Photo path to approve")
-  .option("--all", "Approve all matches for the person")
-  .action((options) => {
-    if (options.person) {
-      return approveMatchCommand(options);
-    }
-    return approveCommand();
-  });
+// Photos command group
+const photos = program
+  .command("photos")
+  .description("List, review, and export recognized photos")
+  .option("--person <name>", "Filter by person name")
+  .option("--status <status>", "Filter by status (pending, approved, rejected, manual, all)")
+  .option("--scan <id>", "Filter by scan ID", parseInt)
+  .option("-o, --open", "Open photos in Preview")
+  .option("-l, --limit <number>", "Limit results", parseInt)
+  .option("--offset <number>", "Skip first n results", parseInt)
+  .option("--json", "Output as JSON")
+  .action(photosListCommand);
 
-program
+photos
+  .command("approve")
+  .description("Approve photo recognitions")
+  .argument("[indexesOrPerson]", "Indexes (1,2,4-6) or person name")
+  .argument("[path]", "Photo path (when using person name)")
+  .option("--all", "Approve all in current list")
+  .option("--without <indexes>", "Exclude these indexes when using --all")
+  .option("--dry-run", "Preview without making changes")
+  .action(photosApproveCommand);
+
+photos
   .command("reject")
-  .description("Mark a recognition as incorrect (false positive)")
-  .requiredOption("--person <name>", "Person name")
-  .requiredOption("--photo <path>", "Photo path")
-  .action(rejectMatchCommand);
+  .description("Reject photo recognitions (mark as false positive)")
+  .argument("[indexesOrPerson]", "Indexes (1,2,4-6) or person name")
+  .argument("[path]", "Photo path (when using person name)")
+  .option("--all", "Reject all in current list")
+  .option("--without <indexes>", "Exclude these indexes when using --all")
+  .option("--max-confidence <n>", "Reject photos with confidence ≤ n%", parseInt)
+  .option("--person <name>", "Filter for --max-confidence")
+  .option("--dry-run", "Preview without making changes")
+  .action(photosRejectCommand);
 
-program
-  .command("add-match")
-  .description("Manually add a person to a photo (for missed detections)")
-  .requiredOption("--person <name>", "Person name")
-  .requiredOption("--photo <path>", "Photo path")
-  .action(addMatchCommand);
+photos
+  .command("add")
+  .description("Manually add person to photo (false negative correction)")
+  .argument("<person>", "Person name")
+  .argument("<path>", "Photo path")
+  .action(photosAddCommand);
+
+photos
+  .command("export")
+  .description("Export approved photos to Apple Photos albums")
+  .option("--person <name>", "Export only for specific person")
+  .option("--album <name>", "Custom album name")
+  .action(photosExportCommand);
 
 program
   .command("status")
