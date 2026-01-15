@@ -35,3 +35,4 @@ Thumbs.db
 .claude-book.db-shm
 .claude-book.db-wal
 .claude-book-review.json
+.claude-book-session.json

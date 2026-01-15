@@ -167,17 +167,17 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     process.exit(1);
   }
 
-  let foundMessage = `Found ${totalPhotos} photos to scan`;
+  // Create scan record first so we can show the ID
+  const scanId = createScan(paths);
+
+  let foundMessage = `[Scan #${scanId}] Found ${totalPhotos} photos`;
   if (options.limit || options.filter) {
     const parts: string[] = [];
     if (options.filter) parts.push(`filter: ${options.filter}`);
-    if (options.limit) parts.push(`limit: ${options.limit} new scans`);
+    if (options.limit) parts.push(`limit: ${options.limit} new`);
     foundMessage += ` (${parts.join(", ")})`;
   }
   spinner.succeed(foundMessage);
-
-  // Create scan record
-  const scanId = createScan(paths);
 
   // Scan photos with caching
   // When limit is set, progress bar tracks new scans toward the limit
@@ -216,7 +216,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       const newScans = progress.processed - progress.cached;
       const progressValue = useNewScansProgress ? newScans : progress.processed;
       progressBar.update(progressValue, {
-        matched: progress.matched,
+        matched: useNewScansProgress ? progress.newMatched : progress.matched,
         cached: progress.cached,
         file: basename(progress.currentPhoto),
       });
@@ -247,7 +247,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   updateAllPersonPhotoCounts();
 
   // Show cache stats
-  console.log(`\nCache stats: ${stats.photosCached} from cache, ${stats.photosProcessed - stats.photosCached} newly scanned`);
+  console.log(`\nCache: ${stats.photosCached} cached, ${stats.photosProcessed - stats.photosCached} new`);
 
   // Filter to only NEW photos (not from cache) for summary and album creation
   const newPersonPhotos = new Map<string, PhotoMatch[]>();

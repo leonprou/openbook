@@ -18,6 +18,7 @@ export interface ScanProgress {
   total: number;
   processed: number;
   matched: number;
+  newMatched: number;
   cached: number;
   currentPhoto: string;
 }
@@ -78,6 +79,7 @@ export class PhotoScanner {
     const personPhotosMap = new Map<string, PhotoMatch[]>();
     let processed = 0;
     let matched = 0;
+    let newMatched = 0;
     let cached = 0;
     let newScans = 0;
 
@@ -90,6 +92,7 @@ export class PhotoScanner {
           total: totalCount,
           processed,
           matched,
+          newMatched,
           cached,
           currentPhoto: photo.path,
         });
@@ -135,6 +138,9 @@ export class PhotoScanner {
 
         if (effectiveRecognitions.length > 0) {
           matched++;
+          if (!fromCache) {
+            newMatched++;
+          }
 
           // Create PhotoMatch entry
           const photoMatch: PhotoMatch = {
@@ -220,6 +226,7 @@ export class PhotoScanner {
           total: totalCount,
           processed,
           matched,
+          newMatched: matched,  // No caching in this method, so newMatched = matched
           cached: 0,
           currentPhoto: photo.path,
         });
