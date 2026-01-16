@@ -1,6 +1,51 @@
 import { readdirSync, statSync } from "fs";
 import { join, extname, basename } from "path";
 import type { PhotoInfo, PhotoSource } from "./types";
+import { createLogger } from "../logger";
+
+const logger = createLogger("local-source");
+const MAX_SORT_BUFFER = 50000;
+
+/**
+ * Extract a sortable key from a filename for chronological ordering.
+ * Sort order: IDs (prefix "0") → Dates (prefix "1") → Alphabetical (prefix "2")
+ */
+function extractSortKey(filename: string): string {
+  // Pattern 1: Telegram format - photo_<id>@DD-MM-YYYY_HH-MM-SS
+  // Example: photo_29425@03-10-2025_15-15-15.jpg
+  const telegramMatch = filename.match(
+    /@(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{2})/
+  );
+  if (telegramMatch) {
+    const [, d, m, y, h, min, s] = telegramMatch;
+    return `1${y}${m}${d}${h}${min}${s}`;
+  }
+
+  // Pattern 2: Numeric ID after prefix (IMG_0001, DSC_1234, P1010001)
+  const idMatch = filename.match(/^[A-Z]{2,5}[_-]?(\d+)/i);
+  if (idMatch) {
+    return "0" + idMatch[1].padStart(10, "0");
+  }
+
+  // Pattern 3: Leading numeric ID (0001_photo, 1234.jpg)
+  const leadingIdMatch = filename.match(/^(\d{1,6})(?!\d)/);
+  if (leadingIdMatch) {
+    return "0" + leadingIdMatch[1].padStart(10, "0");
+  }
+
+  // Pattern 4: YYYYMMDD with optional HHMMSS
+  // Matches: 20231225_143052, 2023-12-25_14-30-52
+  const dateTimeMatch = filename.match(
+    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_]?(\d{2})?[-_]?(\d{2})?[-_]?(\d{2})?/
+  );
+  if (dateTimeMatch) {
+    const [, y, m, d, h = "00", min = "00", s = "00"] = dateTimeMatch;
+    return `1${y}${m}${d}${h}${min}${s}`;
+  }
+
+  // Fallback: alphabetical (sorts last)
+  return "2" + filename.toLowerCase();
+}
 
 export interface LocalPhotoSourceOptions {
   limit?: number;
@@ -50,21 +95,25 @@ export class LocalPhotoSource implements PhotoSource {
     let entries;
     try {
       entries = readdirSync(dirPath, { withFileTypes: true });
-    } catch (error) {
+    } catch {
       // Directory doesn't exist or not accessible
       return;
     }
 
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
+    // Collect files and subdirectories separately for sorting
+    const files: PhotoInfo[] = [];
+    const subdirs: string[] = [];
 
+    for (const entry of entries) {
       // Skip hidden files and directories
       if (entry.name.startsWith(".")) {
         continue;
       }
 
+      const fullPath = join(dirPath, entry.name);
+
       if (entry.isDirectory()) {
-        yield* this.scanDirectory(fullPath);
+        subdirs.push(fullPath);
       } else if (entry.isFile()) {
         const ext = extname(entry.name).toLowerCase();
         if (this.extensions.has(ext)) {
@@ -83,18 +132,42 @@ export class LocalPhotoSource implements PhotoSource {
 
           try {
             const stats = statSync(fullPath);
-            yield {
+            files.push({
               path: fullPath,
               filename: basename(entry.name, ext),
               extension: ext,
               size: stats.size,
               modifiedAt: stats.mtime,
-            };
+            });
           } catch {
             // File not accessible, skip
           }
         }
       }
+    }
+
+    // Sort and yield files (with safety limit for large directories)
+    if (files.length > MAX_SORT_BUFFER) {
+      logger.warn(
+        { directory: dirPath, fileCount: files.length, limit: MAX_SORT_BUFFER },
+        "Directory exceeds sort limit, yielding unsorted"
+      );
+      for (const photo of files) {
+        yield photo;
+      }
+    } else {
+      files.sort((a, b) =>
+        extractSortKey(a.filename).localeCompare(extractSortKey(b.filename))
+      );
+      for (const photo of files) {
+        yield photo;
+      }
+    }
+
+    // Recurse into subdirectories (sorted alphabetically)
+    subdirs.sort();
+    for (const subdir of subdirs) {
+      yield* this.scanDirectory(subdir);
     }
   }
 }

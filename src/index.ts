@@ -75,7 +75,7 @@ const photos = program
   .description("List, review, and export recognized photos")
   .option("--person <name>", "Filter by person name")
   .option("--status <status>", "Filter by status (pending, approved, rejected, manual, all)")
-  .option("--scan <id>", "Filter by scan ID", parseInt)
+  .option("--scan <id>", "Filter by scan ID (use 'latest' for most recent)")
   .option("-o, --open", "Open photos in Preview")
   .option("-l, --limit <number>", "Limit results", parseInt)
   .option("--offset <number>", "Skip first n results", parseInt)

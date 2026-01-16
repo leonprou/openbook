@@ -1,6 +1,38 @@
 import ora from "ora";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { resolve } from "path";
+import { resolve, dirname, basename } from "path";
+
+/**
+ * Extract a sortable key from a filename for chronological ordering in display.
+ */
+function extractSortKeyForDisplay(filename: string): string {
+  // Pattern 1: Telegram format - photo_<id>@DD-MM-YYYY_HH-MM-SS
+  const telegramMatch = filename.match(
+    /@(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{2})/
+  );
+  if (telegramMatch) {
+    const [, d, m, y, h, min, s] = telegramMatch;
+    return `1${y}${m}${d}${h}${min}${s}`;
+  }
+
+  // Pattern 2: Numeric ID after prefix (IMG_0001, DSC_1234)
+  const idMatch = filename.match(/^[A-Z]{2,5}[_-]?(\d+)/i);
+  if (idMatch) {
+    return "0" + idMatch[1].padStart(10, "0");
+  }
+
+  // Pattern 3: YYYYMMDD with optional HHMMSS
+  const dateTimeMatch = filename.match(
+    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_]?(\d{2})?[-_]?(\d{2})?[-_]?(\d{2})?/
+  );
+  if (dateTimeMatch) {
+    const [, y, m, d, h = "00", min = "00", s = "00"] = dateTimeMatch;
+    return `1${y}${m}${d}${h}${min}${s}`;
+  }
+
+  // Fallback: alphabetical
+  return "2" + filename.toLowerCase();
+}
 import { homedir } from "os";
 import { spawn } from "child_process";
 import {
@@ -261,7 +293,7 @@ function parseIndexes(str: string): number[] {
 interface PhotosListOptions {
   person?: string;
   status?: string;
-  scan?: number;
+  scan?: number | string;
   open?: boolean;
   limit?: number;
   offset?: number;
@@ -310,15 +342,43 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
 
   const status = (options.status as PhotoStatus) ?? getDefaultStatus(options);
 
+  // Resolve "latest" to actual scan ID
+  let scanId: number | undefined;
+  if (options.scan === "latest") {
+    const lastScan = getLastScan();
+    if (!lastScan) {
+      console.log("No scans found. Run 'claude-book scan' first.");
+      return;
+    }
+    scanId = lastScan.id;
+    console.log(`Using latest scan #${scanId}`);
+  } else if (typeof options.scan === "number") {
+    scanId = options.scan;
+  } else if (typeof options.scan === "string") {
+    scanId = parseInt(options.scan, 10);
+  }
+
   const filter: PhotoFilter = {
     person: options.person,
     status,
-    scanId: options.scan,
+    scanId,
     limit: options.limit ?? 50,
     offset: options.offset ?? 0,
   };
 
   const results = queryPhotos(filter);
+
+  // Sort results chronologically by filename
+  results.sort((a, b) => {
+    const keyA = extractSortKeyForDisplay(basename(a.path));
+    const keyB = extractSortKeyForDisplay(basename(b.path));
+    return keyA.localeCompare(keyB);
+  });
+
+  // Re-assign indexes after sorting
+  results.forEach((photo, i) => {
+    photo.index = i + 1;
+  });
 
   if (results.length === 0) {
     console.log("No photos found matching filters.");
@@ -338,20 +398,24 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
 
   // Print header
   console.log();
-  console.log(" #   Person       Confidence  Status     Path");
-  console.log("─".repeat(80));
+  console.log(" #   Person       Confidence  Status     Folder           Filename");
+  console.log("─".repeat(95));
 
   for (const photo of results) {
     const personPadded = photo.person.slice(0, 12).padEnd(12);
     const confStr = `${photo.confidence.toFixed(1)}%`.padEnd(11);
     const statusPadded = photo.status.padEnd(10);
-    const pathTrunc =
-      photo.path.length > 40
-        ? "..." + photo.path.slice(-37)
-        : photo.path;
+
+    // Extract folder and filename
+    const folder = basename(dirname(photo.path));
+    const folderTrunc =
+      folder.length > 16 ? folder.slice(0, 13) + "..." : folder.padEnd(16);
+    const filename = basename(photo.path);
+    const filenameTrunc =
+      filename.length > 40 ? filename.slice(0, 37) + "..." : filename;
 
     console.log(
-      ` ${String(photo.index).padStart(2)}  ${personPadded} ${confStr} ${statusPadded} ${pathTrunc}`
+      ` ${String(photo.index).padStart(2)}  ${personPadded} ${confStr} ${statusPadded} ${folderTrunc} ${filenameTrunc}`
     );
   }
 
