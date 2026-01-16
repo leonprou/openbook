@@ -379,6 +379,24 @@ export function getRecentScans(limit: number = 5): Scan[] {
   }));
 }
 
+// Clear all scans and reset photos
+export function clearAllScans(): { scansCleared: number; photosReset: number } {
+  const database = getDb();
+
+  const scansCount = (
+    database.query("SELECT COUNT(*) as count FROM scans").get() as { count: number }
+  ).count;
+  const photosCount = (
+    database.query("SELECT COUNT(*) as count FROM photos").get() as { count: number }
+  ).count;
+
+  database.exec("DELETE FROM recognition_history");
+  database.exec("DELETE FROM scans");
+  database.exec("UPDATE photos SET recognitions = NULL, corrections = NULL, last_scan_id = NULL");
+
+  return { scansCleared: scansCount, photosReset: photosCount };
+}
+
 // Photo functions
 export function getPhotoByHash(hash: string): Photo | null {
   const database = getDb();

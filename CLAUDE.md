@@ -61,6 +61,8 @@ bun run start <command>
 | `claude-book scan --exclude "thumb"` | Exclude files containing "thumb" in filename |
 | `claude-book scan list` | List recent scans with stats |
 | `claude-book scan show <id>` | Show details for a specific scan |
+| `claude-book scan clear` | Clear all scans and reset recognitions |
+| `claude-book scan clear --force` | Clear without confirmation |
 
 ### Photos Commands
 

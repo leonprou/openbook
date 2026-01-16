@@ -7,6 +7,7 @@ import {
   scanCommand,
   scanListHistoryCommand,
   scanShowCommand,
+  scanClearCommand,
 } from "./commands/scan";
 import {
   photosListCommand,
@@ -50,6 +51,7 @@ const scan = program
   .option("-f, --filter <regex>", "Filter files by regex pattern (matches filename)")
   .option("-e, --exclude <pattern...>", "Exclude files containing pattern in filename")
   .option("-v, --verbose", "Show list of scanned files")
+  .option("--report", "Show photos report after scan completes")
   .action((path, options) => scanCommand({ ...options, path: path || options.path }));
 
 scan
@@ -68,6 +70,12 @@ scan
   .option("-o, --open", "Open photos in Preview")
   .option("--json", "Output as JSON")
   .action(scanShowCommand);
+
+scan
+  .command("clear")
+  .description("Clear all scan history and reset photo recognitions")
+  .option("-f, --force", "Skip confirmation prompt")
+  .action(scanClearCommand);
 
 // Photos command group
 const photos = program

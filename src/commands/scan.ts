@@ -4,6 +4,7 @@ import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { LocalPhotoSource } from "../sources/local";
 import { PhotoScanner, type PhotoMatch, type VerboseInfo } from "../pipeline/scanner";
+import { photosListCommand } from "./photos";
 import {
   checkOsxphotosInstalled,
   createAlbumsForPeople,
@@ -22,6 +23,7 @@ import {
   getRecentScans,
   getPhotosByScan,
   addCorrection,
+  clearAllScans,
   type Photo,
   type Scan,
 } from "../db";
@@ -51,6 +53,7 @@ interface ScanOptions {
   filter?: string;
   exclude?: string[];
   verbose?: boolean;
+  report?: boolean;
 }
 
 function expandPath(p: string): string {
@@ -273,6 +276,10 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       console.log("  - Adding more reference photos");
       console.log("  - Lowering minConfidence in config.yaml");
     }
+    if (options.report) {
+      console.log("\n--- Scan Report ---");
+      await photosListCommand({ scan: scanId, status: "all", limit: 50 });
+    }
     return;
   }
 
@@ -294,6 +301,10 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     for (const [person, matches] of newPersonPhotos) {
       const avgConfidence = calculateAvgConfidence(matches);
       console.log(`  "${config.albums.prefix}: ${person} ${REVIEW_SUFFIX}" (${matches.length} photos, avg ${avgConfidence.toFixed(1)}%)`);
+    }
+    if (options.report) {
+      console.log("\n--- Scan Report ---");
+      await photosListCommand({ scan: scanId, status: "all", limit: 50 });
     }
     return;
   }
@@ -341,6 +352,11 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   console.log("  2. Remove any incorrect photos from the review albums");
   console.log("  3. Run 'claude-book approve' to approve correct matches");
   console.log("  4. Run 'claude-book reject' to mark false positives");
+
+  if (options.report) {
+    console.log("\n--- Scan Report ---");
+    await photosListCommand({ scan: scanId, status: "all", limit: 50 });
+  }
 }
 
 /**
@@ -507,4 +523,37 @@ export async function scanShowCommand(scanId: string, options: ScanShowOptions =
 
   console.log();
   console.log("Use 'claude-book photos --scan " + scan.id + "' to manage these photos.");
+}
+
+interface ScanClearOptions {
+  force?: boolean;
+}
+
+/**
+ * scan clear - Clear all scans and reset photo recognitions
+ */
+export async function scanClearCommand(options: ScanClearOptions = {}): Promise<void> {
+  try {
+    initDatabase();
+  } catch {
+    console.log("Database not initialized. Nothing to clear.");
+    return;
+  }
+
+  const scans = getRecentScans(1);
+  if (scans.length === 0) {
+    console.log("No scans found. Nothing to clear.");
+    return;
+  }
+
+  if (!options.force) {
+    console.log("This will clear all scans and reset photo recognitions.");
+    console.log("Photo records will be preserved, but their recognitions and corrections will be cleared.");
+    console.log();
+    console.log("Use --force to confirm.");
+    return;
+  }
+
+  const result = clearAllScans();
+  console.log(`Cleared ${result.scansCleared} scan(s) and reset ${result.photosReset} photo(s).`);
 }

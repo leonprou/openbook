@@ -14,11 +14,12 @@ function extractSortKey(filename: string): string {
   // Pattern 1: Telegram format - photo_<id>@DD-MM-YYYY_HH-MM-SS
   // Example: photo_29425@03-10-2025_15-15-15.jpg
   const telegramMatch = filename.match(
-    /@(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{2})/
+    /(\d+)@(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{2})/
   );
   if (telegramMatch) {
-    const [, d, m, y, h, min, s] = telegramMatch;
-    return `1${y}${m}${d}${h}${min}${s}`;
+    const [, id, d, m, y, h, min, s] = telegramMatch;
+    // Include padded ID as secondary sort key for same-timestamp photos
+    return `1${y}${m}${d}${h}${min}${s}_${id.padStart(10, "0")}`;
   }
 
   // Pattern 2: Numeric ID after prefix (IMG_0001, DSC_1234, P1010001)
