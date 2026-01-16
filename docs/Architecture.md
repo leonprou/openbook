@@ -1,0 +1,376 @@
+# Architecture
+
+## Overview
+
+Claude Book uses a two-phase face recognition system:
+
+1. **Training** - Index reference photos of known people to AWS Rekognition
+2. **Scanning** - Match faces in your photo library against trained faces
+3. **Review** - Approve or reject matches, add missed people
+4. **Export** - Create Apple Photos albums for approved matches
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Training   │────▶│  Scanning   │────▶│   Review    │────▶│   Export    │
+│             │     │             │     │             │     │             │
+│ references/ │     │ Photo lib   │     │ approve/    │     │ osxphotos   │
+│ → AWS       │     │ → matches   │     │ reject      │     │ → Albums    │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              CLI Layer                                   │
+│  src/commands/   init | train | scan | approve | status | list          │
+└─────────────────────────────────┬───────────────────────────────────────┘
+                                  │
+          ┌───────────────────────┼───────────────────────┐
+          ▼                       ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Pipeline Layer │     │   Data Layer    │     │ External Services│
+│                 │     │                 │     │                 │
+│ src/pipeline/   │     │ src/db/         │     │ src/rekognition/│
+│ - scanner.ts    │◀───▶│ - SQLite DB     │     │ - AWS client    │
+│                 │     │ - persons       │     │                 │
+│ src/sources/    │     │ - photos        │     │ src/export/     │
+│ - local.ts      │     │ - scans         │     │ - albums.ts     │
+│ - types.ts      │     │ - corrections   │     │ - osxphotos     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+### Directory Structure
+
+| Directory | Purpose |
+|-----------|---------|
+| `src/commands/` | CLI command handlers |
+| `src/pipeline/` | Photo processing logic |
+| `src/sources/` | Photo source adapters (local filesystem) |
+| `src/db/` | SQLite database operations |
+| `src/rekognition/` | AWS Rekognition API client |
+| `src/export/` | Apple Photos album creation |
+| `src/utils/` | Utilities (file hashing) |
+
+## Data Models
+
+### Entity Relationships
+
+```
+┌─────────────┐         ┌─────────────┐         ┌─────────────┐
+│   persons   │         │   photos    │         │    scans    │
+├─────────────┤         ├─────────────┤         ├─────────────┤
+│ id (PK)     │◀──┐     │ hash (PK)   │    ┌───▶│ id (PK)     │
+│ name        │   │     │ path        │    │    │ started_at  │
+│ face_count  │   │     │ last_scan_id│────┘    │ completed_at│
+│ photo_count │   └─────│ recognitions│ (JSON)  │ stats...    │
+└─────────────┘         │ corrections │ (JSON)  └─────────────┘
+                        └─────────────┘
+                               │
+                               ▼
+                  ┌────────────────────────┐
+                  │  recognition_history   │
+                  ├────────────────────────┤
+                  │ id (PK)                │
+                  │ photo_hash (FK)        │
+                  │ scan_id (FK)           │
+                  │ recognitions (JSON)    │
+                  └────────────────────────┘
+```
+
+### Table Schemas
+
+**persons** - Trained people from reference photos
+```sql
+id INTEGER PRIMARY KEY
+name TEXT UNIQUE NOT NULL      -- folder name from references/
+face_count INTEGER             -- indexed faces in AWS
+photo_count INTEGER            -- matched photos count
+```
+
+**photos** - Scanned photos (keyed by content hash)
+```sql
+hash TEXT PRIMARY KEY          -- SHA256 of file contents
+path TEXT NOT NULL             -- last known file path
+last_scan_id INTEGER           -- FK to scans table
+recognitions TEXT              -- JSON: [{personId, personName, confidence, boundingBox}]
+corrections TEXT               -- JSON: [{personId, type: approved|false_positive|false_negative}]
+```
+
+**scans** - Audit trail of scan runs
+```sql
+id INTEGER PRIMARY KEY
+started_at TEXT NOT NULL
+completed_at TEXT
+source_paths TEXT              -- JSON array of scanned directories
+photos_processed INTEGER
+photos_cached INTEGER
+matches_found INTEGER
+```
+
+### JSON Structures
+
+**Recognition** (stored in photos.recognitions):
+```json
+{
+  "personId": 1,
+  "personName": "Mom",
+  "confidence": 94.5,
+  "faceId": "abc-123",
+  "boundingBox": {"left": 0.1, "top": 0.2, "width": 0.3, "height": 0.4}
+}
+```
+
+**Correction** (stored in photos.corrections):
+```json
+{
+  "personId": 1,
+  "personName": "Mom",
+  "type": "approved",         // or "false_positive" or "false_negative"
+  "createdAt": "2024-01-15T10:30:00Z"
+}
+```
+
+## Photo Status Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                          SCAN                                    │
+│   AWS Rekognition analyzes photos for faces                     │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        PENDING                                   │
+│   Initial state. Awaiting human review.                         │
+│   • Match found → shows person name + confidence %              │
+│   • No match → shows "(no match)" with 0.0%                     │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+            ┌─────────────────┼─────────────────┐
+            ▼                 ▼                 ▼
+┌───────────────────┐ ┌───────────────┐ ┌───────────────────┐
+│     APPROVED      │ │   REJECTED    │ │      MANUAL       │
+│                   │ │               │ │                   │
+│ User confirmed    │ │ False positive│ │ User added a      │
+│ recognition is    │ │ Wrong match,  │ │ missed person     │
+│ correct           │ │ excluded from │ │ (false negative   │
+│                   │ │ future use    │ │ correction)       │
+└─────────┬─────────┘ └───────────────┘ └─────────┬─────────┘
+          │                                       │
+          └───────────────────┬───────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         EXPORT                                   │
+│   Only approved + manual photos are exported to Apple Photos    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Status Definitions
+
+| Status | Description | Exported? |
+|--------|-------------|-----------|
+| `pending` | Recognition awaiting review | No |
+| `approved` | User confirmed match is correct | Yes |
+| `rejected` | Marked as false positive (wrong match) | No |
+| `manual` | User manually added person (missed by AI) | Yes |
+
+## Core Processes
+
+### Training Process
+
+**Entry point**: `src/commands/train.ts`
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│ references/ │────▶│ Scan dirs   │────▶│ IndexFaces  │────▶│ persons     │
+│ mom/        │     │             │     │ API         │     │ table       │
+│ dad/        │     │ person →    │     │             │     │             │
+│ ...         │     │ [photos]    │     │ faceId ←    │     │ face_count  │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```
+
+1. Scan `references/` directory for person folders
+2. For each person folder, find all photo files
+3. Call AWS `IndexFaces` API for each photo
+4. Create/update `persons` record with face count
+5. Faces stored in AWS Rekognition collection (not local DB)
+
+### Scanning Process
+
+**Entry point**: `src/commands/scan.ts` → `src/pipeline/scanner.ts`
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         Scanning Sequence                                 │
+└──────────────────────────────────────────────────────────────────────────┘
+
+ Photo Source         Scanner              Database           AWS Rekognition
+      │                  │                    │                     │
+      │  async yield     │                    │                     │
+      │────────────────▶│                    │                     │
+      │   PhotoInfo      │                    │                     │
+      │                  │                    │                     │
+      │                  │  getFileInfo()     │                     │
+      │                  │  (SHA256 hash)     │                     │
+      │                  │                    │                     │
+      │                  │  getPhotoByHash()  │                     │
+      │                  │───────────────────▶│                     │
+      │                  │                    │                     │
+      │                  │◀───────────────────│                     │
+      │                  │  cached? ──────────┼─────────────────────┤
+      │                  │     │              │                     │
+      │                  │     │ NO           │                     │
+      │                  │     ▼              │                     │
+      │                  │  searchFaces()     │                     │
+      │                  │─────────────────────────────────────────▶│
+      │                  │                    │                     │
+      │                  │◀─────────────────────────────────────────│
+      │                  │  FaceMatch[]       │                     │
+      │                  │                    │                     │
+      │                  │  savePhoto()       │                     │
+      │                  │───────────────────▶│                     │
+      │                  │                    │                     │
+      │                  │  saveRecogHistory()│                     │
+      │                  │───────────────────▶│                     │
+      │                  │     │              │                     │
+      │                  │     │ YES (cached) │                     │
+      │                  │     ▼              │                     │
+      │                  │  Use cached        │                     │
+      │                  │  recognitions      │                     │
+      │                  │                    │                     │
+      │                  │  Apply corrections │                     │
+      │                  │  Filter by minConf │                     │
+      │                  │                    │                     │
+      │                  │  Return PhotoMatch │                     │
+      │                  │                    │                     │
+```
+
+Key files:
+- `src/pipeline/scanner.ts:69-204` - Main scanning loop
+- `src/sources/local.ts` - Async generator for photo discovery
+- `src/utils/hash.ts` - SHA256 computation
+
+### Corrections & Export Process
+
+**Entry point**: `src/commands/approve.ts`
+
+```
+User Action           Database              Export
+     │                   │                    │
+     │  approve/reject   │                    │
+     │──────────────────▶│                    │
+     │                   │                    │
+     │  addCorrection()  │                    │
+     │  (updates JSON)   │                    │
+     │                   │                    │
+     │  export cmd       │                    │
+     │──────────────────▶│                    │
+     │                   │                    │
+     │  getEffective     │                    │
+     │  Matches()        │                    │
+     │◀──────────────────│                    │
+     │                   │                    │
+     │  (filters out     │                    │
+     │  false_positive,  │                    │
+     │  adds false_neg)  │                    │
+     │                   │                    │
+     │  createAlbums()   │                    │
+     │─────────────────────────────────────▶│
+     │                   │                    │
+     │                   │  osxphotos CLI     │
+     │                   │  → Apple Photos    │
+```
+
+## Caching Strategy
+
+### Content-Based Addressing
+
+Photos are identified by SHA256 hash of file contents:
+
+```
+/path/to/photo.jpg  ───▶  SHA256  ───▶  "abc123..."  ───▶  DB lookup
+```
+
+**Benefits**:
+- File renames/moves don't cause re-scanning
+- Duplicate files detected automatically
+- Content changes trigger re-scan
+
+**Implementation**: `src/utils/hash.ts`
+
+### Cache Invalidation
+
+| Scenario | Behavior |
+|----------|----------|
+| Same file, same content | Use cached recognitions |
+| Same file, modified content | New hash → re-scan |
+| File moved/renamed | Same hash → use cache |
+| `--rescan` flag | Force re-scan all photos |
+
+## AWS Rekognition Integration
+
+**Client**: `src/rekognition/client.ts`
+
+### Rate Limiting
+
+Uses Bottleneck library to limit API calls:
+- **Rate**: 5 requests/second
+- **Concurrent**: 1 request at a time
+
+### Image Preparation
+
+Before sending to AWS:
+1. Images >4096px are resized (Sharp library)
+2. HEIC files converted to JPEG
+3. Temporary file created for upload
+
+### API Calls
+
+| Operation | API | When |
+|-----------|-----|------|
+| Training | `IndexFaces` | `train` command |
+| Scanning | `SearchFacesByImage` | `scan` command |
+| Status | `DescribeCollection` | `status` command |
+| Cleanup | `DeleteCollection` | `cleanup` command |
+
+## Configuration
+
+### config.yaml
+
+```yaml
+aws:
+  region: us-east-1
+
+rekognition:
+  collectionId: claude-book-faces
+  minConfidence: 80              # Match threshold (0-100)
+
+sources:
+  local:
+    paths:
+      - ~/Pictures/Family
+    extensions: [".jpg", ".jpeg", ".png", ".heic"]
+
+training:
+  referencesPath: ./references
+
+albums:
+  prefix: "Claude Book"          # Album naming: "Claude Book: Mom"
+```
+
+### Environment Variables
+
+```bash
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_REGION=us-east-1             # Optional, overrides config
+```
+
+## Key Concepts
+
+- **Recognitions**: Raw detections from AWS Rekognition (person + confidence %)
+- **Corrections**: User feedback that modifies recognition status
+- **Effective matches**: Final result after applying corrections (used for export)
+
+Photos are identified by content hash (SHA256), so renamed/moved files stay cached.

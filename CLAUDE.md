@@ -2,6 +2,22 @@
 
 CLI tool for organizing family photos using face recognition with AWS Rekognition.
 
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| `docs/Architecture.md` | System architecture, data models, core processes, caching strategy |
+| `docs/MANUAL.md` | Comprehensive CLI command reference |
+| `README.md` | User-facing quick start and overview |
+
+### Important for Claude
+
+1. **Before planning**: Read `docs/Architecture.md` to understand system design and data flows
+2. **Before committing**: Update relevant documentation if changes affect:
+   - CLI commands or options → update `CLAUDE.md` and `docs/MANUAL.md`
+   - Architecture or data models → update `docs/Architecture.md`
+   - User-facing features → update `README.md`
+
 ## Quick Reference
 
 ```bash
