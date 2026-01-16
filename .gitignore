@@ -36,3 +36,4 @@ Thumbs.db
 .claude-book.db-wal
 .claude-book-review.json
 .claude-book-session.json
+.claude/settings.local.json
