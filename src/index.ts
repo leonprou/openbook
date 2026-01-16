@@ -48,6 +48,7 @@ const scan = program
   .option("--rescan", "Force re-scan of cached photos")
   .option("-l, --limit <number>", "Limit number of new photos to scan", parseInt)
   .option("-f, --filter <regex>", "Filter files by regex pattern (matches filename)")
+  .option("-e, --exclude <pattern...>", "Exclude files containing pattern in filename")
   .option("-v, --verbose", "Show list of scanned files")
   .action((path, options) => scanCommand({ ...options, path: path || options.path }));
 

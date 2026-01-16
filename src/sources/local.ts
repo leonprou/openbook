@@ -5,6 +5,7 @@ import type { PhotoInfo, PhotoSource } from "./types";
 export interface LocalPhotoSourceOptions {
   limit?: number;
   filter?: RegExp;
+  exclude?: string[];
 }
 
 export class LocalPhotoSource implements PhotoSource {
@@ -13,12 +14,14 @@ export class LocalPhotoSource implements PhotoSource {
   private extensions: Set<string>;
   private limit?: number;
   private filter?: RegExp;
+  private exclude?: string[];
 
   constructor(paths: string[], extensions: string[], options?: LocalPhotoSourceOptions) {
     this.paths = paths;
     this.extensions = new Set(extensions.map((e) => e.toLowerCase()));
     this.limit = options?.limit;
     this.filter = options?.filter;
+    this.exclude = options?.exclude?.map((p) => p.toLowerCase());
   }
 
   async *scan(): AsyncGenerator<PhotoInfo> {
@@ -68,6 +71,14 @@ export class LocalPhotoSource implements PhotoSource {
           // Apply filter (match against filename only)
           if (this.filter && !this.filter.test(entry.name)) {
             continue;
+          }
+
+          // Apply exclude patterns (case-insensitive substring match)
+          if (this.exclude?.length) {
+            const lowerName = entry.name.toLowerCase();
+            if (this.exclude.some((pattern) => lowerName.includes(pattern))) {
+              continue;
+            }
           }
 
           try {

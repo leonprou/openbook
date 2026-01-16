@@ -42,6 +42,7 @@ bun run start <command>
 | `claude-book scan` | Use paths from config.yaml |
 | `claude-book scan --dry-run` | Preview without making changes |
 | `claude-book scan --rescan` | Force re-scan of cached photos |
+| `claude-book scan --exclude "thumb"` | Exclude files containing "thumb" in filename |
 | `claude-book scan list` | List recent scans with stats |
 | `claude-book scan show <id>` | Show details for a specific scan |
 

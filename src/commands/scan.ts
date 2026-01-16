@@ -49,6 +49,7 @@ interface ScanOptions {
   rescan?: boolean;
   limit?: number;
   filter?: string;
+  exclude?: string[];
   verbose?: boolean;
 }
 
@@ -152,6 +153,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   // Build source options (limit is handled by scanner for new scans only)
   const sourceOptions = {
     filter: options.filter ? new RegExp(options.filter) : undefined,
+    exclude: options.exclude,
   };
 
   // Count photos
@@ -164,6 +166,9 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     if (options.filter) {
       console.error(`  Filter applied: ${options.filter}`);
     }
+    if (options.exclude?.length) {
+      console.error(`  Exclude patterns: ${options.exclude.join(", ")}`);
+    }
     process.exit(1);
   }
 
@@ -171,9 +176,10 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   const scanId = createScan(paths);
 
   let foundMessage = `[Scan #${scanId}] Found ${totalPhotos} photos`;
-  if (options.limit || options.filter) {
+  if (options.limit || options.filter || options.exclude?.length) {
     const parts: string[] = [];
     if (options.filter) parts.push(`filter: ${options.filter}`);
+    if (options.exclude?.length) parts.push(`exclude: ${options.exclude.join(", ")}`);
     if (options.limit) parts.push(`limit: ${options.limit} new`);
     foundMessage += ` (${parts.join(", ")})`;
   }
