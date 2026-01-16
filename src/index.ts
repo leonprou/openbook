@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 import { initCommand } from "./commands/init";
-import { trainCommand } from "./commands/train";
+import { trainCommand, trainShowCommand } from "./commands/train";
 import {
   scanCommand,
   scanListHistoryCommand,
@@ -31,13 +31,20 @@ program
   .description("Initialize config and AWS Rekognition collection")
   .action(initCommand);
 
-// Train command with positional path
-program
+// Train command with subcommands
+const train = program
   .command("train")
   .description("Index faces from reference folders")
   .argument("[path]", "Path to references folder")
   .option("-r, --references <path>", "Path to references folder (deprecated, use positional)")
   .action(trainCommand);
+
+train
+  .command("show")
+  .description("Show reference photos for a person")
+  .argument("<person>", "Person name")
+  .option("-o, --open", "Open photos in Preview")
+  .action(trainShowCommand);
 
 // Scan command - primary action is scanning, subcommands for history
 const scan = program
