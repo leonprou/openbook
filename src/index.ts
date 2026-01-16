@@ -65,7 +65,6 @@ scan
   .command("list")
   .description("List recent scans with stats")
   .option("-l, --limit <number>", "Number of scans to show", parseInt)
-  .option("-a, --all", "Show all scans including those with no matches")
   .option("-o, --open", "Open photos from latest scan in Preview")
   .option("--json", "Output as JSON")
   .action(scanListHistoryCommand);
@@ -81,7 +80,7 @@ scan
 scan
   .command("clear")
   .description("Clear all scan history and reset photo recognitions")
-  .option("-f, --force", "Skip confirmation prompt")
+  .option("-y, --yes", "Skip confirmation prompt")
   .action(scanClearCommand);
 
 // Photos command group
@@ -141,7 +140,7 @@ program
 program
   .command("cleanup")
   .description("Remove collection and reset")
-  .option("--force", "Skip confirmation")
+  .option("-y, --yes", "Skip confirmation prompt")
   .action(cleanupCommand);
 
 program.parse();

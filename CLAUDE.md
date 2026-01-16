@@ -41,7 +41,7 @@ bun run start <command>
 |---------|-------------|
 | `claude-book init` | Initialize config and AWS Rekognition collection |
 | `claude-book status` | Show collection info and stats |
-| `claude-book cleanup [--force]` | Remove AWS collection |
+| `claude-book cleanup [--yes]` | Remove AWS collection |
 
 ### Training Commands
 
@@ -62,7 +62,7 @@ bun run start <command>
 | `claude-book scan list` | List recent scans with stats |
 | `claude-book scan show <id>` | Show details for a specific scan |
 | `claude-book scan clear` | Clear all scans and reset recognitions |
-| `claude-book scan clear --force` | Clear without confirmation |
+| `claude-book scan clear --yes` | Clear without confirmation |
 
 ### Photos Commands
 

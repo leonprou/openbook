@@ -2,6 +2,7 @@ import ora from "ora";
 import cliProgress from "cli-progress";
 import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
+import { confirm } from "../utils/confirm";
 import { LocalPhotoSource } from "../sources/local";
 import { PhotoScanner, type PhotoMatch, type VerboseInfo } from "../pipeline/scanner";
 import { photosListCommand } from "./photos";
@@ -369,7 +370,6 @@ function openPhotosInPreview(paths: string[]): void {
 
 interface ScanListHistoryOptions {
   limit?: number;
-  all?: boolean;
   open?: boolean;
   json?: boolean;
 }
@@ -393,17 +393,8 @@ export async function scanListHistoryCommand(options: ScanListHistoryOptions = {
     return;
   }
 
-  // Filter out scans with no matches unless --all
-  const scansToShow = options.all ? scans : scans.filter(s => s.matchesFound > 0);
-
-  if (scansToShow.length === 0) {
-    console.log("No scans with matches found.");
-    console.log("Use --all to show all scans.");
-    return;
-  }
-
   if (options.json) {
-    console.log(JSON.stringify(scansToShow, null, 2));
+    console.log(JSON.stringify(scans, null, 2));
     return;
   }
 
@@ -411,7 +402,7 @@ export async function scanListHistoryCommand(options: ScanListHistoryOptions = {
   console.log("ID   Date                 Photos   Matches  New    Source");
   console.log("─".repeat(75));
 
-  for (const scan of scansToShow) {
+  for (const scan of scans) {
     const date = new Date(scan.startedAt);
     const dateStr = date.toLocaleString();
     const newScans = scan.photosProcessed - scan.photosCached;
@@ -426,8 +417,8 @@ export async function scanListHistoryCommand(options: ScanListHistoryOptions = {
   }
 
   // Open photos from latest scan if requested
-  if (options.open && scansToShow.length > 0) {
-    const latestScan = scansToShow[0];
+  if (options.open && scans.length > 0) {
+    const latestScan = scans[0];
     const photos = getPhotosByScan(latestScan.id);
     const photosWithMatches = photos.filter(p => p.recognitions.length > 0);
 
@@ -526,7 +517,7 @@ export async function scanShowCommand(scanId: string, options: ScanShowOptions =
 }
 
 interface ScanClearOptions {
-  force?: boolean;
+  yes?: boolean;
 }
 
 /**
@@ -546,12 +537,16 @@ export async function scanClearCommand(options: ScanClearOptions = {}): Promise<
     return;
   }
 
-  if (!options.force) {
-    console.log("This will clear all scans and reset photo recognitions.");
-    console.log("Photo records will be preserved, but their recognitions and corrections will be cleared.");
-    console.log();
-    console.log("Use --force to confirm.");
-    return;
+  console.log("This will clear all scans and reset photo recognitions.");
+  console.log("Photo records will be preserved, but their recognitions and corrections will be cleared.");
+  console.log();
+
+  if (!options.yes) {
+    const confirmed = await confirm("Are you sure?");
+    if (!confirmed) {
+      console.log("Cancelled.");
+      return;
+    }
   }
 
   const result = clearAllScans();

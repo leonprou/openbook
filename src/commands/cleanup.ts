@@ -1,24 +1,10 @@
 import ora from "ora";
-import { createInterface } from "readline";
 import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
+import { confirm } from "../utils/confirm";
 
 interface CleanupOptions {
-  force?: boolean;
-}
-
-async function confirm(message: string): Promise<boolean> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(`${message} (y/N): `, (answer) => {
-      rl.close();
-      resolve(answer.toLowerCase() === "y");
-    });
-  });
+  yes?: boolean;
 }
 
 export async function cleanupCommand(options: CleanupOptions): Promise<void> {
@@ -29,7 +15,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   console.log(`  Collection: ${config.rekognition.collectionId}`);
   console.log("\nAll indexed faces will be permanently deleted.");
 
-  if (!options.force) {
+  if (!options.yes) {
     const confirmed = await confirm("\nAre you sure you want to continue?");
     if (!confirmed) {
       console.log("Cancelled.");
