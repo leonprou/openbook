@@ -213,13 +213,29 @@ Scanning ~/Pictures/Family...
 
 |████████████████████████████████| 1234/1234
 
-Results:
-  Mom      45 photos (avg 92.3% confidence)
-  Dad      38 photos (avg 88.7% confidence)
-  Sister    6 photos (avg 95.1% confidence)
+Cache: 892 cached, 342 new
 
-Cache: 892 cached, 342 newly scanned
-Scan ID: 15
+New matches found:
+  Mom: 45 photos (avg 92.3% confidence)
+  Dad: 38 photos (avg 88.7% confidence)
+  Sister: 6 photos (avg 95.1% confidence)
+
+Found Photos:
+ #   Person       Confidence  Path
+────────────────────────────────────────────────────────────────────────────────
+  1  Mom          94.2%       ~/Pictures/Family/IMG_1234.jpg
+  2  Mom          91.8%       ~/Pictures/Family/IMG_1235.jpg
+  3  Dad          89.5%       ~/Pictures/Family/IMG_1240.jpg
+...
+
+Showing 50 of 89 photos.
+Use 'claude-book photos --scan 15' for full list.
+
+Next steps:
+  claude-book photos --scan 15           Review photos from this scan
+  claude-book photos approve <indexes>   Approve correct matches
+  claude-book photos reject <indexes>    Reject false positives
+  claude-book photos export              Create albums for approved photos
 ```
 
 ---

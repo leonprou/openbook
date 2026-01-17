@@ -3,16 +3,13 @@ import cliProgress from "cli-progress";
 import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { confirm } from "../utils/confirm";
+import { printPhotoTable, type PhotoRow } from "../utils/table";
 import { LocalPhotoSource } from "../sources/local";
 import { PhotoScanner, type PhotoMatch, type VerboseInfo } from "../pipeline/scanner";
 import { photosListCommand } from "./photos";
-import {
-  checkOsxphotosInstalled,
-  createAlbumsForPeople,
-} from "../export/albums";
-import { existsSync, writeFileSync } from "fs";
+import { existsSync } from "fs";
 import { spawn } from "child_process";
-import { resolve, basename } from "path";
+import { resolve, basename, dirname } from "path";
 import { homedir } from "os";
 import {
   initDatabase,
@@ -28,22 +25,6 @@ import {
   type Photo,
   type Scan,
 } from "../db";
-import { loadConfig as loadConfigForApprove } from "../config";
-import { addPhotosToAlbum } from "../export/albums";
-
-const REVIEW_STATE_FILE = ".claude-book-review.json";
-const REVIEW_SUFFIX = "(Review)";
-
-export interface ReviewState {
-  createdAt: string;
-  albumPrefix: string;
-  scanId: number;
-  people: Record<string, {
-    reviewAlbum: string;
-    photoCount: number;
-    avgConfidence: number;
-  }>;
-}
 
 interface ScanOptions {
   source?: string;
@@ -122,21 +103,6 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       spinner.fail(`Path not found: ${p}`);
       process.exit(1);
     }
-  }
-
-  // Check osxphotos is installed (unless dry run)
-  if (!options.dryRun) {
-    spinner.start("Checking osxphotos installation...");
-    const osxphotosInstalled = await checkOsxphotosInstalled();
-    if (!osxphotosInstalled) {
-      spinner.fail("osxphotos is not installed");
-      console.error("\nInstall osxphotos to create Apple Photos albums:");
-      console.error("  uv tool install osxphotos");
-      console.error("  # or: pip install osxphotos");
-      console.error("\nOr use --dry-run to see what would be organized.");
-      process.exit(1);
-    }
-    spinner.succeed("osxphotos is installed");
   }
 
   // Check collection exists
@@ -290,69 +256,47 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     console.log(`  ${person}: ${matches.length} photos (avg ${avgConfidence.toFixed(1)}% confidence)`);
   }
 
-  // Convert to paths for album creation
-  const personPhotoPaths = new Map<string, string[]>();
+  // Build flat list of all matches for table display
+  const TABLE_LIMIT = 50;
+  const allMatches: PhotoRow[] = [];
+  let idx = 0;
   for (const [person, matches] of newPersonPhotos) {
-    personPhotoPaths.set(person, matches.map(m => m.photoPath));
+    for (const match of matches) {
+      idx++;
+      const bestMatch = match.matches.reduce((best, m) =>
+        m.confidence > best.confidence ? m : best
+      );
+      allMatches.push({
+        index: idx,
+        person,
+        confidence: bestMatch.confidence,
+        status: "pending",
+        path: match.photoPath,
+      });
+    }
   }
 
-  // Create review albums
+  // Display table of found photos (limit to 50)
+  const displayMatches = allMatches.slice(0, TABLE_LIMIT);
+
+  console.log("\nFound Photos:");
+  printPhotoTable(displayMatches);
+
+  if (allMatches.length > TABLE_LIMIT) {
+    console.log(`\nShowing ${TABLE_LIMIT} of ${allMatches.length} photos.`);
+    console.log(`Use 'claude-book photos --scan ${scanId}' for full list.`);
+  }
+
   if (options.dryRun) {
-    console.log("\n[Dry run] Would create review albums:");
-    for (const [person, matches] of newPersonPhotos) {
-      const avgConfidence = calculateAvgConfidence(matches);
-      console.log(`  "${config.albums.prefix}: ${person} ${REVIEW_SUFFIX}" (${matches.length} photos, avg ${avgConfidence.toFixed(1)}%)`);
-    }
-    if (options.report) {
-      console.log("\n--- Scan Report ---");
-      await photosListCommand({ scan: scanId, status: "all", limit: 50 });
-    }
+    console.log("\n[Dry run] No changes made.");
     return;
   }
 
-  spinner.start("Creating review albums in Apple Photos...");
-  const albumResults = await createAlbumsForPeople(
-    personPhotoPaths,
-    config.albums.prefix,
-    false,
-    REVIEW_SUFFIX
-  );
-  spinner.stop();
-
-  console.log("\nReview albums created:");
-  for (const result of albumResults) {
-    if (result.errors.length === 0) {
-      console.log(`  ✓ "${result.albumName}": ${result.photosAdded} photos`);
-    } else {
-      console.log(`  ✗ "${result.albumName}": ${result.errors.join(", ")}`);
-    }
-  }
-
-  // Save review state
-  const reviewState: ReviewState = {
-    createdAt: new Date().toISOString(),
-    albumPrefix: config.albums.prefix,
-    scanId,
-    people: {},
-  };
-
-  for (const [person, matches] of personPhotos) {
-    reviewState.people[person] = {
-      reviewAlbum: `${config.albums.prefix}: ${person} ${REVIEW_SUFFIX}`,
-      photoCount: matches.length,
-      avgConfidence: calculateAvgConfidence(matches),
-    };
-  }
-
-  writeFileSync(REVIEW_STATE_FILE, JSON.stringify(reviewState, null, 2));
-
-  const totalAdded = albumResults.reduce((sum, r) => sum + r.photosAdded, 0);
-  console.log(`\nAdded ${totalAdded} photos to ${albumResults.length} review albums.`);
   console.log("\nNext steps:");
-  console.log("  1. Open Apple Photos and review the albums");
-  console.log("  2. Remove any incorrect photos from the review albums");
-  console.log("  3. Run 'claude-book approve' to approve correct matches");
-  console.log("  4. Run 'claude-book reject' to mark false positives");
+  console.log(`  claude-book photos --scan ${scanId}           Review photos from this scan`);
+  console.log("  claude-book photos approve <indexes>      Approve correct matches");
+  console.log("  claude-book photos reject <indexes>       Reject false positives");
+  console.log("  claude-book photos export                 Create albums for approved photos");
 
   if (options.report) {
     console.log("\n--- Scan Report ---");

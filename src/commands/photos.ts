@@ -1,6 +1,7 @@
 import ora from "ora";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve, dirname, basename } from "path";
+import { printPhotoTable, type PhotoRow } from "../utils/table";
 
 /**
  * Extract a sortable key from a filename for chronological ordering in display.
@@ -404,28 +405,9 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
     return;
   }
 
-  // Print header
+  // Print table
   console.log();
-  console.log(" #   Person       Confidence  Status     Folder           Filename");
-  console.log("─".repeat(95));
-
-  for (const photo of results) {
-    const personPadded = photo.person.slice(0, 12).padEnd(12);
-    const confStr = `${photo.confidence.toFixed(1)}%`.padEnd(11);
-    const statusPadded = photo.status.padEnd(10);
-
-    // Extract folder and filename
-    const folder = basename(dirname(photo.path));
-    const folderTrunc =
-      folder.length > 16 ? folder.slice(0, 13) + "..." : folder.padEnd(16);
-    const filename = basename(photo.path);
-    const filenameTrunc =
-      filename.length > 40 ? filename.slice(0, 37) + "..." : filename;
-
-    console.log(
-      ` ${String(photo.index).padStart(2)}  ${personPadded} ${confStr} ${statusPadded} ${folderTrunc} ${filenameTrunc}`
-    );
-  }
+  printPhotoTable(results);
 
   console.log();
   console.log(`Showing ${results.length} photos.`);
