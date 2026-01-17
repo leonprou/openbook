@@ -51,6 +51,16 @@ export interface ScanStats {
   matchesFound: number;
 }
 
+/** Result of processing a single photo (before DB writes) */
+interface ProcessedPhotoResult {
+  photo: PhotoInfo;
+  hash: string;
+  fileSize: number;
+  fromCache: boolean;
+  recognitions: Recognition[];
+  cachedCorrections: Array<{ personId: number; type: string }>;
+}
+
 export class PhotoScanner {
   private client: FaceRecognitionClient;
   private minConfidence: number;
@@ -190,6 +200,277 @@ export class PhotoScanner {
       if (newScansLimit && newScans >= newScansLimit) {
         log.debug({ newScans, limit: newScansLimit }, "Reached new scans limit");
         break;
+      }
+    }
+
+    return {
+      personPhotos: personPhotosMap,
+      stats: {
+        photosProcessed: processed,
+        photosCached: cached,
+        matchesFound: matched,
+      },
+    };
+  }
+
+  /**
+   * Process a single photo: compute hash, check cache, call AWS if needed.
+   * Does NOT write to database - that's done after batch completes.
+   */
+  private async processPhotoItem(
+    photo: PhotoInfo,
+    forceRescan: boolean
+  ): Promise<ProcessedPhotoResult> {
+    const fileInfo = await getFileInfo(photo.path);
+    const photoHash = fileInfo.hash;
+
+    // Check cache
+    const cachedPhoto = forceRescan ? null : getPhotoByHash(photoHash);
+
+    if (cachedPhoto && cachedPhoto.recognitions.length >= 0) {
+      // Cache hit
+      return {
+        photo,
+        hash: photoHash,
+        fileSize: fileInfo.size,
+        fromCache: true,
+        recognitions: cachedPhoto.recognitions,
+        cachedCorrections: cachedPhoto.corrections,
+      };
+    }
+
+    // Cache miss - call AWS Rekognition
+    const matches = await this.client.searchFaces(photo.path);
+    log.debug({ photo: photo.path, matchCount: matches.length }, "Search completed");
+
+    const recognitions = await this.convertMatchesToRecognitions(matches);
+
+    return {
+      photo,
+      hash: photoHash,
+      fileSize: fileInfo.size,
+      fromCache: false,
+      recognitions,
+      cachedCorrections: [],
+    };
+  }
+
+  /**
+   * Process a batch of photos in parallel.
+   * Returns results for all photos (failures are logged and skipped).
+   */
+  private async processBatch(
+    photos: PhotoInfo[],
+    forceRescan: boolean
+  ): Promise<ProcessedPhotoResult[]> {
+    const promises = photos.map((photo) =>
+      this.processPhotoItem(photo, forceRescan).catch((error) => {
+        log.error({ photo: photo.path, error }, "Error processing photo");
+        return null;
+      })
+    );
+
+    const results = await Promise.all(promises);
+    return results.filter((r): r is ProcessedPhotoResult => r !== null);
+  }
+
+  /**
+   * Scan photos with parallel processing for improved performance.
+   * Processes photos in batches to utilize concurrent AWS calls.
+   * @param concurrency - Number of photos to process in parallel (default: 5)
+   */
+  async scanPhotosParallel(
+    photos: AsyncGenerator<PhotoInfo>,
+    totalCount: number,
+    scanId: number,
+    onProgress?: ProgressCallback,
+    forceRescan: boolean = false,
+    newScansLimit?: number,
+    onVerbose?: VerboseCallback,
+    concurrency: number = 5
+  ): Promise<{ personPhotos: Map<string, PhotoMatch[]>; stats: ScanStats }> {
+    const personPhotosMap = new Map<string, PhotoMatch[]>();
+    let processed = 0;
+    let matched = 0;
+    let newMatched = 0;
+    let cached = 0;
+    let newScans = 0;
+    let reachedLimit = false;
+
+    // Buffer photos for batch processing
+    const photoBuffer: PhotoInfo[] = [];
+
+    for await (const photo of photos) {
+      if (reachedLimit) break;
+
+      photoBuffer.push(photo);
+
+      // Process when buffer reaches concurrency limit
+      if (photoBuffer.length >= concurrency) {
+        const batch = photoBuffer.splice(0, concurrency);
+        const results = await this.processBatch(batch, forceRescan);
+
+        // Process results in order
+        for (const result of results) {
+          processed++;
+
+          if (result.fromCache) {
+            cached++;
+            log.debug({ photo: result.photo.path, hash: result.hash }, "Using cached result");
+          } else {
+            // Save to database (serialized after parallel processing)
+            savePhoto(result.hash, result.photo.path, result.fileSize, scanId, result.recognitions);
+            saveRecognitionHistory(result.hash, scanId, result.recognitions);
+            newScans++;
+          }
+
+          // Apply corrections and filter by confidence
+          const effectiveRecognitions = this.applyCorrectionsAndFilter(
+            result.recognitions,
+            result.cachedCorrections
+          );
+
+          if (effectiveRecognitions.length > 0) {
+            matched++;
+            if (!result.fromCache) {
+              newMatched++;
+            }
+
+            // Create PhotoMatch entry
+            const photoMatch: PhotoMatch = {
+              photoPath: result.photo.path,
+              photoHash: result.hash,
+              matches: effectiveRecognitions.map((r) => ({
+                personId: r.personId,
+                personName: r.personName,
+                confidence: r.confidence,
+                correctionStatus: this.getCorrectionStatus(r.personId, result.cachedCorrections),
+              })),
+              fromCache: result.fromCache,
+            };
+
+            // Add to each person's list
+            const addedPersons = new Set<string>();
+            for (const match of effectiveRecognitions) {
+              if (!addedPersons.has(match.personName)) {
+                addedPersons.add(match.personName);
+                const personMatches = personPhotosMap.get(match.personName) ?? [];
+                personMatches.push(photoMatch);
+                personPhotosMap.set(match.personName, personMatches);
+              }
+            }
+          }
+
+          // Call verbose callback if provided
+          if (onVerbose) {
+            onVerbose({
+              path: result.photo.path,
+              fromCache: result.fromCache,
+              matches: effectiveRecognitions.map((r) => ({
+                personName: r.personName,
+                confidence: r.confidence,
+              })),
+            });
+          }
+
+          // Emit progress after each photo in batch
+          if (onProgress) {
+            onProgress({
+              total: totalCount,
+              processed,
+              matched,
+              newMatched,
+              cached,
+              currentPhoto: result.photo.path,
+            });
+          }
+
+          // Check limit after each photo
+          if (newScansLimit && newScans >= newScansLimit) {
+            log.debug({ newScans, limit: newScansLimit }, "Reached new scans limit");
+            reachedLimit = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Process remaining photos in buffer
+    if (photoBuffer.length > 0 && !reachedLimit) {
+      const results = await this.processBatch(photoBuffer, forceRescan);
+
+      for (const result of results) {
+        processed++;
+
+        if (result.fromCache) {
+          cached++;
+          log.debug({ photo: result.photo.path, hash: result.hash }, "Using cached result");
+        } else {
+          savePhoto(result.hash, result.photo.path, result.fileSize, scanId, result.recognitions);
+          saveRecognitionHistory(result.hash, scanId, result.recognitions);
+          newScans++;
+        }
+
+        const effectiveRecognitions = this.applyCorrectionsAndFilter(
+          result.recognitions,
+          result.cachedCorrections
+        );
+
+        if (effectiveRecognitions.length > 0) {
+          matched++;
+          if (!result.fromCache) {
+            newMatched++;
+          }
+
+          const photoMatch: PhotoMatch = {
+            photoPath: result.photo.path,
+            photoHash: result.hash,
+            matches: effectiveRecognitions.map((r) => ({
+              personId: r.personId,
+              personName: r.personName,
+              confidence: r.confidence,
+              correctionStatus: this.getCorrectionStatus(r.personId, result.cachedCorrections),
+            })),
+            fromCache: result.fromCache,
+          };
+
+          const addedPersons = new Set<string>();
+          for (const match of effectiveRecognitions) {
+            if (!addedPersons.has(match.personName)) {
+              addedPersons.add(match.personName);
+              const personMatches = personPhotosMap.get(match.personName) ?? [];
+              personMatches.push(photoMatch);
+              personPhotosMap.set(match.personName, personMatches);
+            }
+          }
+        }
+
+        if (onVerbose) {
+          onVerbose({
+            path: result.photo.path,
+            fromCache: result.fromCache,
+            matches: effectiveRecognitions.map((r) => ({
+              personName: r.personName,
+              confidence: r.confidence,
+            })),
+          });
+        }
+
+        if (onProgress) {
+          onProgress({
+            total: totalCount,
+            processed,
+            matched,
+            newMatched,
+            cached,
+            currentPhoto: result.photo.path,
+          });
+        }
+
+        if (newScansLimit && newScans >= newScansLimit) {
+          log.debug({ newScans, limit: newScansLimit }, "Reached new scans limit");
+          break;
+        }
       }
     }
 

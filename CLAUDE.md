@@ -133,7 +133,7 @@ src/
 │   ├── status.ts         # Show collection stats
 │   └── cleanup.ts        # Remove AWS collection
 ├── pipeline/
-│   └── scanner.ts        # Photo scanning pipeline with caching
+│   └── scanner.ts        # Photo scanning pipeline with parallel processing
 └── export/
     └── albums.ts         # Apple Photos album creation via osxphotos
 ```
@@ -181,6 +181,9 @@ training:
 
 albums:
   prefix: "Claude Book"  # Album naming: "Claude Book: Mom"
+
+scanning:
+  concurrency: 5  # Parallel AWS requests (1-10)
 ```
 
 ## Environment Variables

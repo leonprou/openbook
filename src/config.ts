@@ -29,6 +29,9 @@ const configSchema = z.object({
   display: z.object({
     photoLimit: z.number().min(1).max(1000).default(250),
   }).default({}),
+  scanning: z.object({
+    concurrency: z.number().min(1).max(10).default(5),
+  }).default({}),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -58,6 +61,7 @@ export function loadConfig(): Config {
       training: {},
       albums: {},
       display: {},
+      scanning: {},
     });
   }
 
@@ -101,5 +105,8 @@ albums:
 
 display:
   photoLimit: 250  # Max photos shown in list output
+
+scanning:
+  concurrency: 5  # Parallel AWS requests (1-10)
 `;
 }

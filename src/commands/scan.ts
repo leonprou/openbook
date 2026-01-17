@@ -232,7 +232,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       }
     : undefined;
 
-  const { personPhotos, stats } = await scanner.scanPhotosWithCache(
+  const { personPhotos, stats } = await scanner.scanPhotosParallel(
     freshSource.scan(),
     totalPhotos,
     scanId,
@@ -247,7 +247,8 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     },
     options.rescan ?? false,
     options.limit,  // Limit applies to new (non-cached) scans only
-    onVerbose
+    onVerbose,
+    config.scanning.concurrency
   );
 
   progressBar.stop();
