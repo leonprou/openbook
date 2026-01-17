@@ -17,6 +17,7 @@ export interface Scan {
   id: number;
   startedAt: string;
   completedAt: string | null;
+  durationMs: number | null;
   sourcePaths: string[];
   photosProcessed: number;
   photosCached: number;
@@ -102,6 +103,7 @@ export function initDatabase(): void {
       id INTEGER PRIMARY KEY,
       started_at TEXT NOT NULL,
       completed_at TEXT,
+      duration_ms INTEGER,
       source_paths TEXT,
       photos_processed INTEGER DEFAULT 0,
       photos_cached INTEGER DEFAULT 0,
@@ -134,6 +136,13 @@ export function initDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_history_photo ON recognition_history(photo_hash);
     CREATE INDEX IF NOT EXISTS idx_history_scan ON recognition_history(scan_id);
   `);
+
+  // Migration: add duration_ms column if it doesn't exist
+  try {
+    database.exec("ALTER TABLE scans ADD COLUMN duration_ms INTEGER");
+  } catch {
+    // Column already exists, ignore error
+  }
 }
 
 // Person functions
@@ -272,24 +281,33 @@ export function createScan(sourcePaths: string[]): number {
   return result.id;
 }
 
-export function completeScan(scanId: number, stats: ScanStats): void {
+export function completeScan(scanId: number, stats: ScanStats): number {
   const database = getDb();
-  const now = new Date().toISOString();
+  const now = new Date();
+
+  // Get the scan's started_at to calculate duration
+  const scanRow = database.query("SELECT started_at FROM scans WHERE id = $id").get({ $id: scanId }) as { started_at: string } | null;
+  const durationMs = scanRow ? now.getTime() - new Date(scanRow.started_at).getTime() : null;
+
   const stmt = database.query(`
     UPDATE scans
     SET completed_at = $now,
+        duration_ms = $durationMs,
         photos_processed = $processed,
         photos_cached = $cached,
         matches_found = $matches
     WHERE id = $id
   `);
   stmt.run({
-    $now: now,
+    $now: now.toISOString(),
+    $durationMs: durationMs,
     $processed: stats.photosProcessed,
     $cached: stats.photosCached,
     $matches: stats.matchesFound,
     $id: scanId,
   });
+
+  return durationMs ?? 0;
 }
 
 export function getLastScan(): Scan | null {
@@ -303,6 +321,7 @@ export function getLastScan(): Scan | null {
     id: number;
     started_at: string;
     completed_at: string | null;
+    duration_ms: number | null;
     source_paths: string | null;
     photos_processed: number;
     photos_cached: number;
@@ -315,6 +334,7 @@ export function getLastScan(): Scan | null {
     id: row.id,
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    durationMs: row.duration_ms,
     sourcePaths: row.source_paths ? JSON.parse(row.source_paths) : [],
     photosProcessed: row.photos_processed,
     photosCached: row.photos_cached,
@@ -332,6 +352,7 @@ export function getScanById(scanId: number): Scan | null {
     id: number;
     started_at: string;
     completed_at: string | null;
+    duration_ms: number | null;
     source_paths: string | null;
     photos_processed: number;
     photos_cached: number;
@@ -344,6 +365,7 @@ export function getScanById(scanId: number): Scan | null {
     id: row.id,
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    durationMs: row.duration_ms,
     sourcePaths: row.source_paths ? JSON.parse(row.source_paths) : [],
     photosProcessed: row.photos_processed,
     photosCached: row.photos_cached,
@@ -362,6 +384,7 @@ export function getRecentScans(limit: number = 5): Scan[] {
     id: number;
     started_at: string;
     completed_at: string | null;
+    duration_ms: number | null;
     source_paths: string | null;
     photos_processed: number;
     photos_cached: number;
@@ -372,6 +395,7 @@ export function getRecentScans(limit: number = 5): Scan[] {
     id: row.id,
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    durationMs: row.duration_ms,
     sourcePaths: row.source_paths ? JSON.parse(row.source_paths) : [],
     photosProcessed: row.photos_processed,
     photosCached: row.photos_cached,

@@ -48,6 +48,27 @@ function expandPath(p: string): string {
 }
 
 /**
+ * Format duration in milliseconds to human-readable string
+ */
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+/**
  * Calculate average confidence for a person's matches
  */
 function calculateAvgConfidence(matches: PhotoMatch[]): number {
@@ -266,13 +287,15 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   }
 
   // Complete scan record
-  completeScan(scanId, stats);
+  const durationMs = completeScan(scanId, stats);
 
   // Update person photo counts
   updateAllPersonPhotoCounts();
 
-  // Show cache stats
-  console.log(`\nCache: ${stats.photosCached} cached, ${stats.photosProcessed - stats.photosCached} new`);
+  // Show duration and cache stats
+  const avgPerPhoto = stats.photosProcessed > 0 ? durationMs / stats.photosProcessed : 0;
+  console.log(`\nCompleted in ${formatDuration(durationMs)} (${stats.photosProcessed} photos @ ${Math.round(avgPerPhoto)}ms/photo avg)`);
+  console.log(`Cache: ${stats.photosCached} cached, ${stats.photosProcessed - stats.photosCached} new`);
 
   // Filter to only NEW photos (not from cache) for summary and album creation
   const newPersonPhotos = new Map<string, PhotoMatch[]>();
@@ -390,20 +413,21 @@ export async function scanListHistoryCommand(options: ScanListHistoryOptions = {
   }
 
   // Table header
-  console.log("ID   Date                 Photos   Matches  New    Source");
-  console.log("─".repeat(75));
+  console.log("ID   Date                 Photos   Matches  New    Duration   Source");
+  console.log("─".repeat(90));
 
   for (const scan of scans) {
     const date = new Date(scan.startedAt);
     const dateStr = date.toLocaleString();
     const newScans = scan.photosProcessed - scan.photosCached;
+    const durationStr = scan.durationMs ? formatDuration(scan.durationMs) : "-";
     const source = scan.sourcePaths.length > 0
       ? scan.sourcePaths[0].replace(homedir(), "~")
       : "(unknown)";
-    const truncatedSource = source.length > 30 ? source.slice(0, 27) + "..." : source;
+    const truncatedSource = source.length > 25 ? source.slice(0, 22) + "..." : source;
 
     console.log(
-      `${String(scan.id).padEnd(5)}${dateStr.padEnd(21)}${String(scan.photosProcessed).padEnd(9)}${String(scan.matchesFound).padEnd(9)}${String(newScans).padEnd(7)}${truncatedSource}`
+      `${String(scan.id).padEnd(5)}${dateStr.padEnd(21)}${String(scan.photosProcessed).padEnd(9)}${String(scan.matchesFound).padEnd(9)}${String(newScans).padEnd(7)}${durationStr.padEnd(11)}${truncatedSource}`
     );
   }
 
@@ -477,6 +501,10 @@ export async function scanShowCommand(scanId: string, options: ScanShowOptions =
     console.log(`Path: ${scan.sourcePaths.join(", ")}`);
   }
   console.log(`Photos: ${scan.photosProcessed} processed, ${scan.matchesFound} with matches`);
+  if (scan.durationMs) {
+    const avgPerPhoto = scan.photosProcessed > 0 ? scan.durationMs / scan.photosProcessed : 0;
+    console.log(`Duration: ${formatDuration(scan.durationMs)} (${Math.round(avgPerPhoto)}ms/photo avg)`);
+  }
   console.log();
 
   if (photosWithMatches.length === 0) {
