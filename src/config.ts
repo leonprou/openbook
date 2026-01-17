@@ -30,7 +30,7 @@ const configSchema = z.object({
     photoLimit: z.number().min(1).max(1000).default(250),
   }).default({}),
   scanning: z.object({
-    concurrency: z.number().min(1).max(10).default(5),
+    concurrency: z.number().min(1).max(10).default(10),
   }).default({}),
 });
 
@@ -107,6 +107,6 @@ display:
   photoLimit: 250  # Max photos shown in list output
 
 scanning:
-  concurrency: 5  # Parallel AWS requests (1-10)
+  concurrency: 10  # Parallel AWS requests (1-10)
 `;
 }
