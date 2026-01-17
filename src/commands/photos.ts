@@ -1,7 +1,8 @@
 import ora from "ora";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, statSync } from "fs";
 import { resolve, dirname, basename } from "path";
 import { printPhotoTable, type PhotoRow } from "../utils/table";
+import { extractDateFromFilename } from "../sources/local";
 
 /**
  * Extract a sortable key from a filename for chronological ordering in display.
@@ -76,6 +77,7 @@ interface PhotoResult {
   status: PhotoStatus;
   scanId: number | null;
   scannedAt: string;
+  date?: Date;
 }
 
 interface LastQuery {
@@ -159,6 +161,15 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
       ? JSON.parse(row.corrections)
       : [];
 
+    // Extract date from filename, fallback to file mtime
+    let photoDate: Date | undefined;
+    try {
+      const filename = basename(row.path);
+      photoDate = extractDateFromFilename(filename) ?? statSync(row.path).mtime;
+    } catch {
+      // File may not exist anymore
+    }
+
     // Also include false negatives (manually added matches)
     const falseNegatives = corrections
       .filter((c) => c.type === "false_negative")
@@ -193,6 +204,7 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
           status: "pending" as PhotoStatus,
           scanId: row.last_scan_id,
           scannedAt: row.last_scanned_at,
+          date: photoDate,
         });
         index++;
       }
@@ -221,6 +233,7 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
         status,
         scanId: row.last_scan_id,
         scannedAt: row.last_scanned_at,
+        date: photoDate,
       });
 
       index++;

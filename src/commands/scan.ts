@@ -4,7 +4,7 @@ import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { confirm } from "../utils/confirm";
 import { printPhotoTable, type PhotoRow } from "../utils/table";
-import { LocalPhotoSource } from "../sources/local";
+import { LocalPhotoSource, extractDateFromFilename } from "../sources/local";
 import { PhotoScanner, type PhotoMatch, type VerboseInfo } from "../pipeline/scanner";
 import { photosListCommand } from "./photos";
 import { existsSync } from "fs";
@@ -161,20 +161,23 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
     // Show files that would be scanned
     const limit = config.display.photoLimit;
-    const files: string[] = [];
+    const files: { path: string; date: Date }[] = [];
     for await (const photo of source.scan()) {
-      files.push(photo.path);
+      const date = extractDateFromFilename(photo.filename) ?? photo.modifiedAt;
+      files.push({ path: photo.path, date });
       if (files.length >= limit) break;
     }
 
     if (files.length > 0) {
       console.log("\nFiles to scan:");
-      console.log(" #    Folder                          Filename");
-      console.log("─".repeat(80));
-      files.forEach((path, i) => {
-        const folder = dirname(path).split("/").slice(-2).join("/");
-        const filename = basename(path);
-        console.log(`${String(i + 1).padStart(4)}  ${folder.padEnd(30)}  ${filename}`);
+      console.log(" #    Date        Folder                          Filename");
+      console.log("─".repeat(95));
+      files.forEach((f, i) => {
+        const dateStr = f.date.toISOString().split("T")[0];
+        const folder = dirname(f.path).split("/").slice(-2).join("/");
+        const filename = basename(f.path);
+        const folderTrunc = folder.length > 30 ? folder.slice(0, 27) + "..." : folder.padEnd(30);
+        console.log(`${String(i + 1).padStart(4)}  ${dateStr}  ${folderTrunc}  ${filename}`);
       });
       if (totalPhotos > limit) {
         console.log(`\n... and ${totalPhotos - limit} more files`);
@@ -311,12 +314,15 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       const bestMatch = match.matches.reduce((best, m) =>
         m.confidence > best.confidence ? m : best
       );
+      // Extract date from filename
+      const photoDate = extractDateFromFilename(basename(match.photoPath)) ?? undefined;
       allMatches.push({
         index: idx,
         person,
         confidence: bestMatch.confidence,
         status: "pending",
         path: match.photoPath,
+        date: photoDate,
       });
     }
   }
