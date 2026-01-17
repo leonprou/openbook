@@ -110,6 +110,70 @@ Training faces...
 
 ---
 
+### train show
+
+Show reference photos used to train a person.
+
+```
+claude-book train show <person> [options]
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `person` | Person name |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-o, --open` | Open photos in Preview |
+
+**Example:**
+```bash
+$ claude-book train show mom
+
+Reference photos for "mom":
+  ~/references/mom/photo1.jpg
+  ~/references/mom/photo2.jpg
+  ~/references/mom/photo3.jpg
+
+3 reference photos
+```
+
+---
+
+### train cleanup
+
+Remove AWS Rekognition collection (all trained face data).
+
+```
+claude-book train cleanup [--yes]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-y, --yes` | Skip confirmation prompt |
+
+**Example:**
+```bash
+$ claude-book train cleanup
+
+This will delete the AWS Rekognition collection:
+  Collection: claude-book-faces
+
+All indexed faces will be permanently deleted.
+
+Are you sure you want to continue? [y/N] y
+✓ Collection deleted successfully
+
+To start fresh, run:
+  claude-book init
+  claude-book train -r ./references
+```
+
+---
+
 ### scan
 
 Scan photos to find and match faces.
@@ -229,7 +293,7 @@ Status:
 
 ### photos
 
-List recognized photos with optional filters.
+List scanned photos with optional filters.
 
 ```
 claude-book photos [options]
@@ -238,7 +302,7 @@ claude-book photos [options]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--person <name>` | Filter by person name |
+| `--person <name>` | Filter by person name (use `all` for any recognized) |
 | `--status <status>` | Filter by status (see below) |
 | `--scan <id>` | Filter by scan ID |
 | `--open` | Open photos in Preview app |
@@ -249,27 +313,29 @@ claude-book photos [options]
 **Status values:**
 | Status | Description |
 |--------|-------------|
-| `pending` | Not yet reviewed |
+| `pending` | Not yet reviewed (includes unrecognized photos) |
 | `approved` | Confirmed correct |
 | `rejected` | Marked as wrong |
 | `manual` | Manually added |
 | `all` | Show all statuses |
 
-**Default status behavior:**
-- `photos` → defaults to `approved` (your curated collection)
-- `photos --scan <id>` → defaults to `all` (explore scan results)
-
-Use `--status pending` to see photos needing review.
+**Default behavior:**
+- `photos` → shows ALL scanned photos (including unrecognized)
+- `photos --person all` → shows only photos with recognitions
+- `photos --person "Mom"` → shows only photos recognized as Mom
 
 **Examples:**
 ```bash
-# List all pending photos
+# List all scanned photos
 $ claude-book photos
 
-# List pending for specific person
+# List only photos with recognitions
+$ claude-book photos --person all
+
+# List photos for specific person
 $ claude-book photos --person "Mom"
 
-# List approved photos
+# List approved photos only
 $ claude-book photos --status approved
 
 # List photos from a specific scan
@@ -547,35 +613,6 @@ Database:
   Rejected:   55
 
 Last scan:   2024-01-15 14:30 (Scan #15)
-```
-
----
-
-### cleanup
-
-Remove AWS Rekognition collection.
-
-```
-claude-book cleanup [--yes]
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-y, --yes` | Skip confirmation prompt |
-
-**Example:**
-```bash
-$ claude-book cleanup
-
-⚠ This will delete the AWS Rekognition collection "claude-book-faces"
-  containing 7 indexed faces.
-
-  The local database will NOT be deleted.
-
-Continue? [y/N] y
-
-✓ Deleted collection: claude-book-faces
 ```
 
 ---

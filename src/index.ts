@@ -46,6 +46,12 @@ train
   .option("-o, --open", "Open photos in Preview")
   .action(trainShowCommand);
 
+train
+  .command("cleanup")
+  .description("Remove AWS Rekognition collection")
+  .option("-y, --yes", "Skip confirmation prompt")
+  .action(cleanupCommand);
+
 // Scan command - primary action is scanning, subcommands for history
 const scan = program
   .command("scan")
@@ -87,7 +93,7 @@ scan
 const photos = program
   .command("photos")
   .description("List, review, and export recognized photos")
-  .option("--person <name>", "Filter by person name")
+  .option("--person <name>", "Filter by person name (use 'all' for any recognized)")
   .option("--status <status>", "Filter by status (pending, approved, rejected, manual, all)")
   .option("--scan <id>", "Filter by scan ID (use 'latest' for most recent)")
   .option("-o, --open", "Open photos in Preview")
@@ -136,11 +142,5 @@ program
   .command("status")
   .description("Show collection info and stats")
   .action(statusCommand);
-
-program
-  .command("cleanup")
-  .description("Remove collection and reset")
-  .option("-y, --yes", "Skip confirmation prompt")
-  .action(cleanupCommand);
 
 program.parse();

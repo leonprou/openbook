@@ -128,13 +128,15 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
   const results: PhotoResult[] = [];
 
   // Build query based on filters
-  // When filtering by scan ID, show ALL photos (including those without matches)
-  // Otherwise, only show photos with recognitions
+  // Show all photos by default, use --person all to filter to only recognized
   let query: string;
   if (filter.scanId) {
     query = `SELECT * FROM photos WHERE last_scan_id = ${filter.scanId}`;
-  } else {
+  } else if (filter.person === "all") {
+    // --person all: show only photos with recognitions
     query = "SELECT * FROM photos WHERE recognitions IS NOT NULL AND recognitions != '[]'";
+  } else {
+    query = "SELECT * FROM photos";
   }
 
   query += " ORDER BY last_scanned_at DESC";
@@ -169,10 +171,18 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
 
     const allRecognitions = [...recognitions, ...falseNegatives];
 
-    // Handle photos with no recognitions (when filtering by scan)
+    // Handle photos with no recognitions
     if (allRecognitions.length === 0) {
-      // Only include no-match photos when filtering by scan and status is "all"
-      if (filter.scanId && (filter.status === "all" || !filter.status)) {
+      // Skip if --person all (only show recognized photos)
+      if (filter.person === "all") {
+        continue;
+      }
+      // Skip if filtering by specific person
+      if (filter.person && filter.person !== "(no match)") {
+        continue;
+      }
+      // Include no-match photos when status is "all" or "pending"
+      if (filter.status === "all" || filter.status === "pending" || !filter.status) {
         results.push({
           index,
           hash: row.hash,
@@ -191,8 +201,8 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
     for (const rec of allRecognitions) {
       const status = getRecognitionStatus(rec.personId, corrections);
 
-      // Apply person filter
-      if (filter.person && rec.personName !== filter.person) {
+      // Apply person filter (skip if "all" - show all people)
+      if (filter.person && filter.person !== "all" && rec.personName !== filter.person) {
         continue;
       }
 
@@ -323,11 +333,8 @@ interface PhotosExportOptions {
 /**
  * Determine default status based on filters
  */
-function getDefaultStatus(options: PhotosListOptions): PhotoStatus {
-  if (options.scan) {
-    return "all";
-  }
-  return "approved";
+function getDefaultStatus(_options: PhotosListOptions): PhotoStatus {
+  return "all";
 }
 
 /**

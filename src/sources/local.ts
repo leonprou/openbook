@@ -4,7 +4,7 @@ import type { PhotoInfo, PhotoSource } from "./types";
 import { createLogger } from "../logger";
 
 const logger = createLogger("local-source");
-const MAX_SORT_BUFFER = 50000;
+const MAX_SORT_BUFFER = 100000;
 
 /**
  * Extract a sortable key from a filename for chronological ordering.

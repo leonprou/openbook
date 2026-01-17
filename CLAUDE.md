@@ -41,7 +41,6 @@ bun run start <command>
 |---------|-------------|
 | `claude-book init` | Initialize config and AWS Rekognition collection |
 | `claude-book status` | Show collection info and stats |
-| `claude-book cleanup [--yes]` | Remove AWS collection |
 
 ### Training Commands
 
@@ -49,6 +48,7 @@ bun run start <command>
 |---------|-------------|
 | `claude-book train <path>` | Index faces from reference folders |
 | `claude-book train` | Use path from config.yaml |
+| `claude-book train cleanup [--yes]` | Remove AWS Rekognition collection |
 
 ### Scan Commands
 
@@ -68,7 +68,8 @@ bun run start <command>
 
 | Command | Description |
 |---------|-------------|
-| `claude-book photos` | List photos (default: approved) |
+| `claude-book photos` | List all scanned photos |
+| `claude-book photos --person all` | List photos with any recognition |
 | `claude-book photos --person "Mom"` | Filter by person |
 | `claude-book photos --status pending` | Filter by status |
 | `claude-book photos --scan 15` | Filter by scan ID |
