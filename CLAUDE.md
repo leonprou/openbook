@@ -76,12 +76,15 @@ bun run start <command>
 | `claude-book photos --scan 15` | Filter by scan ID |
 | `claude-book photos --open` | Open results in Preview |
 | `claude-book photos --json` | Output as JSON |
+| `claude-book photos --min-confidence 80` | Filter by confidence >= 80% |
+| `claude-book photos --max-confidence 70` | Filter by confidence <= 70% |
 | `claude-book photos approve <indexes>` | Approve by index (1,2,4-6) |
 | `claude-book photos approve --all` | Approve all in current list |
 | `claude-book photos approve --all --without 3,5` | Approve all except indexes |
+| `claude-book photos approve --all --min-confidence 90` | Approve high-confidence matches |
 | `claude-book photos approve <person> <path>` | Approve specific photo |
 | `claude-book photos reject <indexes>` | Reject by index |
-| `claude-book photos reject --max-confidence 60` | Reject low-confidence matches |
+| `claude-book photos reject --all --max-confidence 60` | Reject low-confidence matches |
 | `claude-book photos add <person> <path>` | Manually add person to photo |
 | `claude-book photos export` | Export all approved to Apple Photos |
 | `claude-book photos export --person "Mom"` | Export for specific person |

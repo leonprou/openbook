@@ -66,6 +66,8 @@ interface PhotoFilter {
   scanId?: number;
   limit?: number;
   offset?: number;
+  minConfidence?: number;
+  maxConfidence?: number;
 }
 
 interface PhotoResult {
@@ -184,30 +186,8 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
     const allRecognitions = [...recognitions, ...falseNegatives];
 
     // Handle photos with no recognitions
+    // Skip by default - only show when explicitly filtering for "(no match)"
     if (allRecognitions.length === 0) {
-      // Skip if --person all (only show recognized photos)
-      if (filter.person === "all") {
-        continue;
-      }
-      // Skip if filtering by specific person
-      if (filter.person && filter.person !== "(no match)") {
-        continue;
-      }
-      // Include no-match photos when status is "all" or "pending"
-      if (filter.status === "all" || filter.status === "pending" || !filter.status) {
-        results.push({
-          index,
-          hash: row.hash,
-          path: row.path,
-          person: "(no match)",
-          confidence: 0,
-          status: "pending" as PhotoStatus,
-          scanId: row.last_scan_id,
-          scannedAt: row.last_scanned_at,
-          date: photoDate,
-        });
-        index++;
-      }
       continue;
     }
 
@@ -221,6 +201,14 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
 
       // Apply status filter
       if (filter.status && filter.status !== "all" && status !== filter.status) {
+        continue;
+      }
+
+      // Apply confidence filters
+      if (filter.minConfidence !== undefined && rec.confidence < filter.minConfidence) {
+        continue;
+      }
+      if (filter.maxConfidence !== undefined && rec.confidence > filter.maxConfidence) {
         continue;
       }
 
@@ -323,17 +311,22 @@ interface PhotosListOptions {
   limit?: number;
   offset?: number;
   json?: boolean;
+  minConfidence?: number;
+  maxConfidence?: number;
 }
 
 interface PhotosApproveOptions {
   all?: boolean;
   without?: string;
   dryRun?: boolean;
+  minConfidence?: number;
+  maxConfidence?: number;
 }
 
 interface PhotosRejectOptions {
   all?: boolean;
   without?: string;
+  minConfidence?: number;
   maxConfidence?: number;
   person?: string;
   dryRun?: boolean;
@@ -387,6 +380,8 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
     scanId,
     limit: options.limit ?? config.display.photoLimit,
     offset: options.offset ?? 0,
+    minConfidence: options.minConfidence,
+    maxConfidence: options.maxConfidence,
   };
 
   const results = queryPhotos(filter);
@@ -477,6 +472,14 @@ export async function photosApproveCommand(
     if (options.without) {
       const excludeIndexes = new Set(parseIndexes(options.without));
       toApprove = toApprove.filter((p) => !excludeIndexes.has(p.index));
+    }
+
+    // Apply confidence filters
+    if (options.minConfidence !== undefined) {
+      toApprove = toApprove.filter((p) => p.confidence >= options.minConfidence!);
+    }
+    if (options.maxConfidence !== undefined) {
+      toApprove = toApprove.filter((p) => p.confidence <= options.maxConfidence!);
     }
   } else if (indexesOrPerson) {
     const approveIndexes = new Set(parseIndexes(indexesOrPerson));
@@ -589,8 +592,8 @@ export async function photosRejectCommand(
     return;
   }
 
-  // Handle --max-confidence option
-  if (options.maxConfidence !== undefined) {
+  // Handle standalone confidence-based rejection (without --all)
+  if (!options.all && options.maxConfidence !== undefined && !indexesOrPerson) {
     await rejectByMaxConfidence(options.maxConfidence, options.person, options.dryRun);
     return;
   }
@@ -611,6 +614,14 @@ export async function photosRejectCommand(
     if (options.without) {
       const excludeIndexes = new Set(parseIndexes(options.without));
       toReject = toReject.filter((p) => !excludeIndexes.has(p.index));
+    }
+
+    // Apply confidence filters
+    if (options.minConfidence !== undefined) {
+      toReject = toReject.filter((p) => p.confidence >= options.minConfidence!);
+    }
+    if (options.maxConfidence !== undefined) {
+      toReject = toReject.filter((p) => p.confidence <= options.maxConfidence!);
     }
   } else if (indexesOrPerson) {
     const rejectIndexes = new Set(parseIndexes(indexesOrPerson));
