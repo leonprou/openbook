@@ -7,6 +7,37 @@ const logger = createLogger("local-source");
 const MAX_SORT_BUFFER = 100000;
 
 /**
+ * Extract a Date from a filename, or null if not found.
+ */
+export function extractDateFromFilename(filename: string): Date | null {
+  // Pattern 1: Telegram format - photo_<id>@DD-MM-YYYY_HH-MM-SS
+  const telegramMatch = filename.match(
+    /(\d+)@(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{2})/
+  );
+  if (telegramMatch) {
+    const [, , d, m, y, h, min, s] = telegramMatch;
+    return new Date(
+      parseInt(y), parseInt(m) - 1, parseInt(d),
+      parseInt(h), parseInt(min), parseInt(s)
+    );
+  }
+
+  // Pattern 2: YYYYMMDD with optional HHMMSS
+  const dateTimeMatch = filename.match(
+    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_]?(\d{2})?[-_]?(\d{2})?[-_]?(\d{2})?/
+  );
+  if (dateTimeMatch) {
+    const [, y, m, d, h = "0", min = "0", s = "0"] = dateTimeMatch;
+    return new Date(
+      parseInt(y), parseInt(m) - 1, parseInt(d),
+      parseInt(h), parseInt(min), parseInt(s)
+    );
+  }
+
+  return null;
+}
+
+/**
  * Extract a sortable key from a filename for chronological ordering.
  * Sort order: IDs (prefix "0") → Dates (prefix "1") → Alphabetical (prefix "2")
  */
@@ -52,6 +83,8 @@ export interface LocalPhotoSourceOptions {
   limit?: number;
   filter?: RegExp;
   exclude?: string[];
+  after?: Date;   // Only include photos after this date
+  before?: Date;  // Only include photos before this date
 }
 
 export class LocalPhotoSource implements PhotoSource {
@@ -61,6 +94,8 @@ export class LocalPhotoSource implements PhotoSource {
   private limit?: number;
   private filter?: RegExp;
   private exclude?: string[];
+  private after?: Date;
+  private before?: Date;
 
   constructor(paths: string[], extensions: string[], options?: LocalPhotoSourceOptions) {
     this.paths = paths;
@@ -68,6 +103,8 @@ export class LocalPhotoSource implements PhotoSource {
     this.limit = options?.limit;
     this.filter = options?.filter;
     this.exclude = options?.exclude?.map((p) => p.toLowerCase());
+    this.after = options?.after;
+    this.before = options?.before;
   }
 
   async *scan(): AsyncGenerator<PhotoInfo> {
@@ -133,6 +170,18 @@ export class LocalPhotoSource implements PhotoSource {
 
           try {
             const stats = statSync(fullPath);
+
+            // Apply date filter (prefer filename date, fallback to file mtime)
+            if (this.after || this.before) {
+              const fileDate = extractDateFromFilename(entry.name) ?? stats.mtime;
+              if (this.after && fileDate < this.after) {
+                continue;
+              }
+              if (this.before && fileDate > this.before) {
+                continue;
+              }
+            }
+
             files.push({
               path: fullPath,
               filename: basename(entry.name, ext),

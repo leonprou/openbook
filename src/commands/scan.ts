@@ -34,6 +34,8 @@ interface ScanOptions {
   limit?: number;
   filter?: string;
   exclude?: string[];
+  after?: Date;
+  before?: Date;
   verbose?: boolean;
   report?: boolean;
 }
@@ -124,6 +126,8 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   const sourceOptions = {
     filter: options.filter ? new RegExp(options.filter) : undefined,
     exclude: options.exclude,
+    after: options.after,
+    before: options.before,
   };
 
   // Count photos
@@ -142,14 +146,55 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     process.exit(1);
   }
 
+  // Dry run: show count and files table, then exit (no DB writes or AWS calls)
+  if (options.dryRun) {
+    let foundMessage = `Found ${totalPhotos} photos`;
+    if (options.filter || options.exclude?.length || options.after || options.before) {
+      const parts: string[] = [];
+      if (options.filter) parts.push(`filter: ${options.filter}`);
+      if (options.exclude?.length) parts.push(`exclude: ${options.exclude.join(", ")}`);
+      if (options.after) parts.push(`after: ${options.after.toISOString().split("T")[0]}`);
+      if (options.before) parts.push(`before: ${options.before.toISOString().split("T")[0]}`);
+      foundMessage += ` (${parts.join(", ")})`;
+    }
+    spinner.succeed(foundMessage);
+
+    // Show files that would be scanned
+    const limit = config.display.photoLimit;
+    const files: string[] = [];
+    for await (const photo of source.scan()) {
+      files.push(photo.path);
+      if (files.length >= limit) break;
+    }
+
+    if (files.length > 0) {
+      console.log("\nFiles to scan:");
+      console.log(" #    Folder                          Filename");
+      console.log("─".repeat(80));
+      files.forEach((path, i) => {
+        const folder = dirname(path).split("/").slice(-2).join("/");
+        const filename = basename(path);
+        console.log(`${String(i + 1).padStart(4)}  ${folder.padEnd(30)}  ${filename}`);
+      });
+      if (totalPhotos > limit) {
+        console.log(`\n... and ${totalPhotos - limit} more files`);
+      }
+    }
+
+    console.log("\n[Dry run] No changes made.");
+    return;
+  }
+
   // Create scan record first so we can show the ID
   const scanId = createScan(paths);
 
   let foundMessage = `[Scan #${scanId}] Found ${totalPhotos} photos`;
-  if (options.limit || options.filter || options.exclude?.length) {
+  if (options.limit || options.filter || options.exclude?.length || options.after || options.before) {
     const parts: string[] = [];
     if (options.filter) parts.push(`filter: ${options.filter}`);
     if (options.exclude?.length) parts.push(`exclude: ${options.exclude.join(", ")}`);
+    if (options.after) parts.push(`after: ${options.after.toISOString().split("T")[0]}`);
+    if (options.before) parts.push(`before: ${options.before.toISOString().split("T")[0]}`);
     if (options.limit) parts.push(`limit: ${options.limit} new`);
     foundMessage += ` (${parts.join(", ")})`;
   }
@@ -245,7 +290,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     }
     if (options.report) {
       console.log("\n--- Scan Report ---");
-      await photosListCommand({ scan: scanId, status: "all", limit: 50 });
+      await photosListCommand({ scan: scanId, status: "all", limit: config.display.photoLimit });
     }
     return;
   }
@@ -257,7 +302,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   }
 
   // Build flat list of all matches for table display
-  const TABLE_LIMIT = 50;
+  const TABLE_LIMIT = config.display.photoLimit;
   const allMatches: PhotoRow[] = [];
   let idx = 0;
   for (const [person, matches] of newPersonPhotos) {
@@ -287,11 +332,6 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     console.log(`Use 'claude-book photos --scan ${scanId}' for full list.`);
   }
 
-  if (options.dryRun) {
-    console.log("\n[Dry run] No changes made.");
-    return;
-  }
-
   console.log("\nNext steps:");
   console.log(`  claude-book photos --scan ${scanId}           Review photos from this scan`);
   console.log("  claude-book photos approve <indexes>      Approve correct matches");
@@ -300,7 +340,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   if (options.report) {
     console.log("\n--- Scan Report ---");
-    await photosListCommand({ scan: scanId, status: "all", limit: 50 });
+    await photosListCommand({ scan: scanId, status: "all", limit: config.display.photoLimit });
   }
 }
 

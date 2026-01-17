@@ -231,7 +231,7 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
 
   // Apply offset and limit
   const offset = filter.offset ?? 0;
-  const limit = filter.limit ?? 50;
+  const limit = filter.limit ?? 250;
 
   return results.slice(offset, offset + limit);
 }
@@ -349,6 +349,7 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
     return;
   }
 
+  const config = loadConfig();
   const status = (options.status as PhotoStatus) ?? getDefaultStatus(options);
 
   // Resolve "latest" to actual scan ID
@@ -371,7 +372,7 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
     person: options.person,
     status,
     scanId,
-    limit: options.limit ?? 50,
+    limit: options.limit ?? config.display.photoLimit,
     offset: options.offset ?? 0,
   };
 

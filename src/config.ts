@@ -26,6 +26,9 @@ const configSchema = z.object({
   albums: z.object({
     prefix: z.string().default("Claude Book"),
   }),
+  display: z.object({
+    photoLimit: z.number().min(1).max(1000).default(250),
+  }).default({}),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -54,6 +57,7 @@ export function loadConfig(): Config {
       sources: { local: {} },
       training: {},
       albums: {},
+      display: {},
     });
   }
 
@@ -94,5 +98,8 @@ training:
 
 albums:
   prefix: "Claude Book"  # Albums: "Claude Book: Mom", "Claude Book: Dad"
+
+display:
+  photoLimit: 250  # Max photos shown in list output
 `;
 }

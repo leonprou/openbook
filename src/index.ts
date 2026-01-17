@@ -53,6 +53,15 @@ train
   .option("-y, --yes", "Skip confirmation prompt")
   .action(cleanupCommand);
 
+// Parse date string (YYYY-MM-DD) to Date
+function parseDate(value: string): Date {
+  const date = new Date(value);
+  if (isNaN(date.getTime())) {
+    throw new Error(`Invalid date: ${value}. Use YYYY-MM-DD format.`);
+  }
+  return date;
+}
+
 // Scan command - primary action is scanning, subcommands for history
 const scan = program
   .command("scan")
@@ -64,6 +73,8 @@ const scan = program
   .option("-l, --limit <number>", "Limit number of new photos to scan", parseInt)
   .option("-f, --filter <regex>", "Filter files by regex pattern (matches filename)")
   .option("-e, --exclude <pattern...>", "Exclude files containing pattern in filename")
+  .option("--after <date>", "Only include photos after date (YYYY-MM-DD)", parseDate)
+  .option("--before <date>", "Only include photos before date (YYYY-MM-DD)", parseDate)
   .option("-v, --verbose", "Show list of scanned files")
   .option("--report", "Show photos report after scan completes")
   .action((path, options) => scanCommand({ ...options, path: path || options.path }));
