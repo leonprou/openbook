@@ -397,6 +397,27 @@ export function clearAllScans(): { scansCleared: number; photosReset: number } {
   return { scansCleared: scansCount, photosReset: photosCount };
 }
 
+// Clear all photos (keeps training data in persons table)
+export function clearAllPhotos(): { photosCleared: number; scansCleared: number } {
+  const database = getDb();
+
+  const photosCount = (
+    database.query("SELECT COUNT(*) as count FROM photos").get() as { count: number }
+  ).count;
+  const scansCount = (
+    database.query("SELECT COUNT(*) as count FROM scans").get() as { count: number }
+  ).count;
+
+  database.exec("DELETE FROM recognition_history");
+  database.exec("DELETE FROM scans");
+  database.exec("DELETE FROM photos");
+
+  // Reset photo counts on persons (but keep training data)
+  database.exec("UPDATE persons SET photo_count = 0");
+
+  return { photosCleared: photosCount, scansCleared: scansCount };
+}
+
 // Photo functions
 export function getPhotoByHash(hash: string): Photo | null {
   const database = getDb();

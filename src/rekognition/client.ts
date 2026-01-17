@@ -164,12 +164,22 @@ export class FaceRecognitionClient {
           }
         }
 
+        // Deduplicate by person, keeping highest confidence per person
+        const bestMatches = new Map<string, FaceMatch>();
+        for (const match of matches) {
+          const existing = bestMatches.get(match.personName);
+          if (!existing || match.confidence > existing.confidence) {
+            bestMatches.set(match.personName, match);
+          }
+        }
+        const deduplicatedMatches = Array.from(bestMatches.values());
+
         log.debug(
-          { imagePath, matchCount: matches.length, matches: matches.map(m => ({ person: m.personName, confidence: m.confidence.toFixed(2) })) },
+          { imagePath, matchCount: deduplicatedMatches.length, matches: deduplicatedMatches.map(m => ({ person: m.personName, confidence: m.confidence.toFixed(2) })) },
           "Search completed"
         );
 
-        return matches;
+        return deduplicatedMatches;
       } catch (error: any) {
         if (error.name === "InvalidParameterException") {
           log.debug({ imagePath }, "No face detected in image");

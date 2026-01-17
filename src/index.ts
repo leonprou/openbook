@@ -18,6 +18,7 @@ import {
 } from "./commands/photos";
 import { statusCommand } from "./commands/status";
 import { cleanupCommand } from "./commands/cleanup";
+import { clearCommand } from "./commands/clear";
 
 const program = new Command();
 
@@ -142,5 +143,11 @@ program
   .command("status")
   .description("Show collection info and stats")
   .action(statusCommand);
+
+program
+  .command("clear")
+  .description("Clear all photos from database (keeps training data)")
+  .option("-y, --yes", "Skip confirmation prompt")
+  .action(clearCommand);
 
 program.parse();

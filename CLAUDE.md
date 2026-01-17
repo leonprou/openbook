@@ -41,6 +41,7 @@ bun run start <command>
 |---------|-------------|
 | `claude-book init` | Initialize config and AWS Rekognition collection |
 | `claude-book status` | Show collection info and stats |
+| `claude-book clear [--yes]` | Clear all photos from database (keeps training data) |
 
 ### Training Commands
 

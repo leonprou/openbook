@@ -633,6 +633,41 @@ Last scan:   2024-01-15 14:30 (Scan #15)
 
 ---
 
+### clear
+
+Clear all photos from the database while keeping training data.
+
+```
+claude-book clear [--yes]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-y, --yes` | Skip confirmation prompt |
+
+**What gets cleared:**
+- All photo records
+- All scan history
+- All recognition history
+
+**What is preserved:**
+- Persons (training data)
+- AWS Rekognition collection (indexed faces)
+
+**Example:**
+```bash
+$ claude-book clear
+
+This will delete all photos and scans from the database.
+Training data (persons) will be preserved.
+
+Are you sure? [y/N] y
+Cleared 1892 photo(s) and 15 scan(s).
+```
+
+---
+
 ## Workflows
 
 ### First-Time Setup
