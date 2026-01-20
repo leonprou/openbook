@@ -465,6 +465,11 @@ export async function photosApproveCommand(
 
   let toApprove: PhotoResult[];
 
+  // If confidence filters specified without indexes, treat as --all with filters
+  if (!indexesOrPerson && (options.minConfidence !== undefined || options.maxConfidence !== undefined)) {
+    options.all = true;
+  }
+
   if (options.all) {
     toApprove = [...lastQuery.results];
 
@@ -606,6 +611,11 @@ export async function photosRejectCommand(
   }
 
   let toReject: PhotoResult[];
+
+  // If confidence filters specified without indexes, treat as --all with filters
+  if (!indexesOrPerson && (options.minConfidence !== undefined || options.maxConfidence !== undefined)) {
+    options.all = true;
+  }
 
   if (options.all) {
     toReject = [...lastQuery.results];

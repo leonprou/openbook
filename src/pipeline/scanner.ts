@@ -215,12 +215,20 @@ export class PhotoScanner {
 
   /**
    * Process a single photo: compute hash, check cache, call AWS if needed.
-   * Does NOT write to database - that's done after batch completes.
+   * Returns null if limit is reached and photo should be skipped.
+   * @param limitState - Optional state for tracking in-flight count against limit
    */
   private async processPhotoItem(
     photo: PhotoInfo,
-    forceRescan: boolean
-  ): Promise<ProcessedPhotoResult> {
+    forceRescan: boolean,
+    limitState?: {
+      newScansLimit: number;
+      getNewScans: () => number;
+      getInFlightNew: () => number;
+      incrementInFlight: () => void;
+      decrementInFlight: () => void;
+    }
+  ): Promise<ProcessedPhotoResult | null> {
     const fileInfo = await getFileInfo(photo.path);
     const photoHash = fileInfo.hash;
 
@@ -228,7 +236,7 @@ export class PhotoScanner {
     const cachedPhoto = forceRescan ? null : getPhotoByHash(photoHash);
 
     if (cachedPhoto && cachedPhoto.recognitions.length >= 0) {
-      // Cache hit
+      // Cache hit - doesn't count against limit
       return {
         photo,
         hash: photoHash,
@@ -239,7 +247,36 @@ export class PhotoScanner {
       };
     }
 
-    // Cache miss - call AWS Rekognition
+    // Cache miss - check limit BEFORE calling AWS
+    if (limitState) {
+      const { newScansLimit, getNewScans, getInFlightNew, incrementInFlight, decrementInFlight } = limitState;
+      if (getNewScans() + getInFlightNew() >= newScansLimit) {
+        log.debug({ photo: photo.path }, "Skipping photo - limit reached");
+        return null; // Skip this photo
+      }
+
+      // Track in-flight and call AWS
+      incrementInFlight();
+      try {
+        const matches = await this.client.searchFaces(photo.path);
+        log.debug({ photo: photo.path, matchCount: matches.length }, "Search completed");
+
+        const recognitions = await this.convertMatchesToRecognitions(matches);
+
+        return {
+          photo,
+          hash: photoHash,
+          fileSize: fileInfo.size,
+          fromCache: false,
+          recognitions,
+          cachedCorrections: [],
+        };
+      } finally {
+        decrementInFlight();
+      }
+    }
+
+    // No limit - call AWS directly
     const matches = await this.client.searchFaces(photo.path);
     log.debug({ photo: photo.path, matchCount: matches.length }, "Search completed");
 
@@ -276,12 +313,27 @@ export class PhotoScanner {
     let newMatched = 0;
     let cached = 0;
     let newScans = 0;
+    let inFlightNew = 0; // Track in-flight AWS calls (cache misses)
     let stopFeeding = false;
 
     // Track pending promises with their settled state
     const pending: Array<{ promise: Promise<void>; settled: boolean }> = [];
 
-    const handleResult = (result: ProcessedPhotoResult) => {
+    // Limit state for processPhotoItem
+    const limitState = newScansLimit
+      ? {
+          newScansLimit,
+          getNewScans: () => newScans,
+          getInFlightNew: () => inFlightNew,
+          incrementInFlight: () => { inFlightNew++; },
+          decrementInFlight: () => { inFlightNew--; },
+        }
+      : undefined;
+
+    const handleResult = (result: ProcessedPhotoResult | null) => {
+      // Skip if photo was skipped due to limit
+      if (result === null) return;
+
       processed++;
 
       if (result.fromCache) {
@@ -365,9 +417,16 @@ export class PhotoScanner {
     for await (const photo of photos) {
       if (stopFeeding) break;
 
+      // Pre-check: stop if limit already reached (including in-flight)
+      if (newScansLimit && newScans + inFlightNew >= newScansLimit) {
+        log.debug({ newScans, inFlightNew, limit: newScansLimit }, "Limit reached, stopping feed");
+        stopFeeding = true;
+        break;
+      }
+
       // Start processing immediately - Bottleneck handles rate limiting
       const entry = { promise: Promise.resolve(), settled: false };
-      entry.promise = this.processPhotoItem(photo, forceRescan)
+      entry.promise = this.processPhotoItem(photo, forceRescan, limitState)
         .then(handleResult)
         .catch((error) => {
           log.error({ photo: photo.path, error }, "Error processing photo");
