@@ -456,6 +456,7 @@ Mark photos as incorrectly recognized (false positives).
 
 ```
 claude-book photos reject <indexes>
+claude-book photos reject --file <filename>
 claude-book photos reject --all [--without <indexes>]
 claude-book photos reject --max-confidence <n> [--person <name>]
 claude-book photos reject <person> <path>
@@ -473,6 +474,7 @@ claude-book photos reject <person> <path>
 |--------|-------------|
 | `--all` | Reject all photos in current list |
 | `--without <indexes>` | Exclude these indexes from `--all` |
+| `--file <filename>` | Reject by filename (must match exactly 1 photo) |
 | `--max-confidence <n>` | Reject photos with confidence ≤ n% |
 | `--person <name>` | Filter for `--max-confidence` |
 | `--dry-run` | Preview without making changes |
@@ -481,6 +483,9 @@ claude-book photos reject <person> <path>
 ```bash
 # Reject specific indexes
 $ claude-book photos reject 3,5
+
+# Reject by filename (from last photos list)
+$ claude-book photos reject --file "photo_24971@06-06-2025.jpg"
 
 # Reject all in list except good ones
 $ claude-book photos reject --all --without 1,2,4

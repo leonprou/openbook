@@ -25,7 +25,8 @@ const program = new Command();
 program
   .name("claude-book")
   .description("CLI tool for organizing family photos using face recognition")
-  .version("0.1.0");
+  .version("0.1.0")
+  .enablePositionalOptions();
 
 program
   .command("init")
@@ -105,6 +106,7 @@ scan
 const photos = program
   .command("photos")
   .description("List, review, and export recognized photos")
+  .passThroughOptions()
   .option("--person <name>", "Filter by person name (use 'all' for any recognized)")
   .option("--status <status>", "Filter by status (pending, approved, rejected, manual, all)")
   .option("--scan <id>", "Filter by scan ID (use 'latest' for most recent)")
@@ -125,6 +127,7 @@ photos
   .option("--without <indexes>", "Exclude these indexes when using --all")
   .option("--min-confidence <n>", "Filter by confidence >= n% (with --all)", parseInt)
   .option("--max-confidence <n>", "Filter by confidence <= n% (with --all)", parseInt)
+  .option("--person <name>", "Filter by person")
   .option("--dry-run", "Preview without making changes")
   .action(photosApproveCommand);
 
@@ -138,6 +141,7 @@ photos
   .option("--min-confidence <n>", "Filter by confidence >= n% (with --all)", parseInt)
   .option("--max-confidence <n>", "Filter by confidence <= n%", parseInt)
   .option("--person <name>", "Filter by person")
+  .option("--file <filename>", "Reject by filename (must match exactly 1 photo)")
   .option("--dry-run", "Preview without making changes")
   .action(photosRejectCommand);
 

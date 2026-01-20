@@ -321,6 +321,7 @@ interface PhotosApproveOptions {
   dryRun?: boolean;
   minConfidence?: number;
   maxConfidence?: number;
+  person?: string;
 }
 
 interface PhotosRejectOptions {
@@ -329,6 +330,7 @@ interface PhotosRejectOptions {
   minConfidence?: number;
   maxConfidence?: number;
   person?: string;
+  file?: string;
   dryRun?: boolean;
 }
 
@@ -456,21 +458,34 @@ export async function photosApproveCommand(
     return;
   }
 
-  // Index-based approval
-  const lastQuery = loadLastQuery();
-  if (!lastQuery) {
-    console.log("No recent photo list found. Run 'claude-book photos' first.");
-    return;
-  }
-
   let toApprove: PhotoResult[];
 
-  // If confidence filters specified without indexes, treat as --all with filters
-  if (!indexesOrPerson && (options.minConfidence !== undefined || options.maxConfidence !== undefined)) {
-    options.all = true;
-  }
+  // If filters specified, query fresh from database (not limited by cached results)
+  const hasFilters = options.person || options.minConfidence !== undefined || options.maxConfidence !== undefined;
 
-  if (options.all) {
+  if (hasFilters) {
+    // Query fresh with filters - high limit to get all matching
+    const filter: PhotoFilter = {
+      person: options.person,
+      status: "pending",
+      limit: 10000,
+      minConfidence: options.minConfidence,
+      maxConfidence: options.maxConfidence,
+    };
+    toApprove = queryPhotos(filter);
+
+    // Exclude specified indexes (if any)
+    if (options.without) {
+      const excludeIndexes = new Set(parseIndexes(options.without));
+      toApprove = toApprove.filter((p) => !excludeIndexes.has(p.index));
+    }
+  } else if (options.all) {
+    // Use cached query for --all without filters
+    const lastQuery = loadLastQuery();
+    if (!lastQuery) {
+      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      return;
+    }
     toApprove = [...lastQuery.results];
 
     // Exclude specified indexes
@@ -478,19 +493,17 @@ export async function photosApproveCommand(
       const excludeIndexes = new Set(parseIndexes(options.without));
       toApprove = toApprove.filter((p) => !excludeIndexes.has(p.index));
     }
-
-    // Apply confidence filters
-    if (options.minConfidence !== undefined) {
-      toApprove = toApprove.filter((p) => p.confidence >= options.minConfidence!);
-    }
-    if (options.maxConfidence !== undefined) {
-      toApprove = toApprove.filter((p) => p.confidence <= options.maxConfidence!);
-    }
   } else if (indexesOrPerson) {
+    // Index-based approval from cached query
+    const lastQuery = loadLastQuery();
+    if (!lastQuery) {
+      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      return;
+    }
     const approveIndexes = new Set(parseIndexes(indexesOrPerson));
     toApprove = lastQuery.results.filter((p) => approveIndexes.has(p.index));
   } else {
-    console.log("Please specify indexes or use --all");
+    console.log("Please specify indexes, filters, or use --all");
     return;
   }
 
@@ -518,10 +531,6 @@ export async function photosApproveCommand(
   }
 
   console.log(`✓ Approved ${count} photos`);
-  if (options.without) {
-    const skipped = lastQuery.results.length - toApprove.length;
-    console.log(`  (skipped ${skipped})`);
-  }
 }
 
 /**
@@ -597,27 +606,46 @@ export async function photosRejectCommand(
     return;
   }
 
-  // Handle standalone confidence-based rejection (without --all)
-  if (!options.all && options.maxConfidence !== undefined && !indexesOrPerson) {
-    await rejectByMaxConfidence(options.maxConfidence, options.person, options.dryRun);
+  // Handle rejection by filename
+  if (options.file) {
+    await rejectByFilename(options.file, options.dryRun);
     return;
   }
 
-  // Index-based rejection
-  const lastQuery = loadLastQuery();
-  if (!lastQuery) {
-    console.log("No recent photo list found. Run 'claude-book photos' first.");
+  // Handle standalone confidence-based rejection (without --all)
+  if (!options.all && options.maxConfidence !== undefined && !indexesOrPerson && !options.person) {
+    await rejectByMaxConfidence(options.maxConfidence, options.person, options.dryRun);
     return;
   }
 
   let toReject: PhotoResult[];
 
-  // If confidence filters specified without indexes, treat as --all with filters
-  if (!indexesOrPerson && (options.minConfidence !== undefined || options.maxConfidence !== undefined)) {
-    options.all = true;
-  }
+  // If filters specified, query fresh from database (not limited by cached results)
+  const hasFilters = options.person || options.minConfidence !== undefined || options.maxConfidence !== undefined;
 
-  if (options.all) {
+  if (hasFilters) {
+    // Query fresh with filters - high limit to get all matching
+    const filter: PhotoFilter = {
+      person: options.person,
+      status: "pending",
+      limit: 10000,
+      minConfidence: options.minConfidence,
+      maxConfidence: options.maxConfidence,
+    };
+    toReject = queryPhotos(filter);
+
+    // Exclude specified indexes (if any)
+    if (options.without) {
+      const excludeIndexes = new Set(parseIndexes(options.without));
+      toReject = toReject.filter((p) => !excludeIndexes.has(p.index));
+    }
+  } else if (options.all) {
+    // Use cached query for --all without filters
+    const lastQuery = loadLastQuery();
+    if (!lastQuery) {
+      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      return;
+    }
     toReject = [...lastQuery.results];
 
     // Exclude specified indexes
@@ -625,19 +653,17 @@ export async function photosRejectCommand(
       const excludeIndexes = new Set(parseIndexes(options.without));
       toReject = toReject.filter((p) => !excludeIndexes.has(p.index));
     }
-
-    // Apply confidence filters
-    if (options.minConfidence !== undefined) {
-      toReject = toReject.filter((p) => p.confidence >= options.minConfidence!);
-    }
-    if (options.maxConfidence !== undefined) {
-      toReject = toReject.filter((p) => p.confidence <= options.maxConfidence!);
-    }
   } else if (indexesOrPerson) {
+    // Index-based rejection from cached query
+    const lastQuery = loadLastQuery();
+    if (!lastQuery) {
+      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      return;
+    }
     const rejectIndexes = new Set(parseIndexes(indexesOrPerson));
     toReject = lastQuery.results.filter((p) => rejectIndexes.has(p.index));
   } else {
-    console.log("Please specify indexes, use --all, or use --max-confidence");
+    console.log("Please specify indexes, filters, or use --all");
     return;
   }
 
@@ -665,10 +691,6 @@ export async function photosRejectCommand(
   }
 
   console.log(`✓ Rejected ${count} photos`);
-  if (options.without) {
-    const skipped = lastQuery.results.length - toReject.length;
-    console.log(`  (skipped ${skipped})`);
-  }
 }
 
 /**
@@ -768,6 +790,51 @@ async function rejectByMaxConfidence(
   }
 
   console.log(`✓ Rejected ${count} photos with confidence ≤ ${maxConfidence}%`);
+}
+
+/**
+ * Reject a photo by filename from last query results
+ */
+async function rejectByFilename(filename: string, dryRun?: boolean): Promise<void> {
+  const lastQuery = loadLastQuery();
+  if (!lastQuery) {
+    console.log("No recent photo list found. Run 'claude-book photos' first.");
+    return;
+  }
+
+  // Find photos matching the filename
+  const matches = lastQuery.results.filter(
+    (p) => basename(p.path) === filename
+  );
+
+  if (matches.length === 0) {
+    console.error(`No photo matching filename "${filename}" in current results.`);
+    process.exit(1);
+  }
+
+  if (matches.length > 1) {
+    console.error(`Multiple photos match filename "${filename}" (found ${matches.length}). Use index to specify:`);
+    for (const photo of matches) {
+      console.error(`  [${photo.index}] ${photo.person} (${photo.confidence.toFixed(1)}%) - ${photo.path}`);
+    }
+    process.exit(1);
+  }
+
+  const photo = matches[0];
+
+  if (dryRun) {
+    console.log(`[Dry run] Would reject:`);
+    console.log(`  [${photo.index}] ${photo.person} (${photo.confidence.toFixed(1)}%) - ${photo.path}`);
+    return;
+  }
+
+  const person = getPerson(photo.person);
+  if (person) {
+    const success = addCorrection(photo.hash, person.id, person.name, "false_positive");
+    if (success) {
+      console.log(`✓ Rejected ${photo.person} (${photo.confidence.toFixed(1)}%) - ${basename(photo.path)}`);
+    }
+  }
 }
 
 /**
