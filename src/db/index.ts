@@ -72,6 +72,36 @@ export interface DbStats {
   lastScan: Scan | null;
 }
 
+export interface PersonAccuracyStats {
+  personId: number;
+  personName: string;
+  approvedCount: number;
+  rejectedCount: number;
+  pendingCount: number;
+  approvalRate: number | null;
+}
+
+export interface ConfidenceBucketStats {
+  minConfidence: number;
+  maxConfidence: number;
+  label: string;
+  approvedCount: number;
+  rejectedCount: number;
+  pendingCount: number;
+  approvalRate: number | null;
+}
+
+export interface AccuracyStats {
+  byPerson: PersonAccuracyStats[];
+  byConfidence: ConfidenceBucketStats[];
+  overall: {
+    totalDecisions: number;
+    approvedCount: number;
+    rejectedCount: number;
+    approvalRate: number | null;
+  };
+}
+
 let db: Database | null = null;
 
 function getDb(): Database {
@@ -650,6 +680,114 @@ export function getStats(): DbStats {
     falseNegativeCount,
     totalPersons,
     lastScan,
+  };
+}
+
+// Get accuracy stats for evaluating classification correctness
+export function getAccuracyStats(): AccuracyStats {
+  const database = getDb();
+
+  // Query all photos with recognitions
+  const rows = database.query(
+    "SELECT recognitions, corrections FROM photos WHERE recognitions IS NOT NULL AND recognitions != '[]'"
+  ).all() as Array<{ recognitions: string; corrections: string | null }>;
+
+  // Initialize buckets: 50-60, 60-70, 70-80, 80-90, 90-100
+  const buckets = [
+    { min: 50, max: 60, label: "50-60%" },
+    { min: 60, max: 70, label: "60-70%" },
+    { min: 70, max: 80, label: "70-80%" },
+    { min: 80, max: 90, label: "80-90%" },
+    { min: 90, max: 100, label: "90-100%" },
+  ];
+
+  // Initialize tracking maps
+  const personStats = new Map<number, { name: string; approved: number; rejected: number; pending: number }>();
+  const bucketStats = buckets.map(b => ({
+    ...b,
+    approved: 0,
+    rejected: 0,
+    pending: 0,
+  }));
+
+  // Process each photo
+  for (const row of rows) {
+    const recognitions: Recognition[] = JSON.parse(row.recognitions);
+    const corrections: Correction[] = row.corrections ? JSON.parse(row.corrections) : [];
+
+    // Build correction lookup by personId
+    const correctionMap = new Map<number, "approved" | "false_positive">();
+    for (const c of corrections) {
+      if (c.type === "approved" || c.type === "false_positive") {
+        correctionMap.set(c.personId, c.type);
+      }
+    }
+
+    // Process each recognition
+    for (const rec of recognitions) {
+      const correction = correctionMap.get(rec.personId);
+      const status = correction === "approved" ? "approved"
+        : correction === "false_positive" ? "rejected"
+        : "pending";
+
+      // Update person stats
+      let ps = personStats.get(rec.personId);
+      if (!ps) {
+        ps = { name: rec.personName, approved: 0, rejected: 0, pending: 0 };
+        personStats.set(rec.personId, ps);
+      }
+      ps[status]++;
+
+      // Update confidence bucket stats
+      const bucket = bucketStats.find(b => rec.confidence >= b.min && rec.confidence < b.max)
+        || bucketStats[bucketStats.length - 1]; // 100% goes in last bucket
+      bucket[status]++;
+    }
+  }
+
+  // Convert person stats to array
+  const byPerson: PersonAccuracyStats[] = Array.from(personStats.entries())
+    .map(([personId, stats]) => {
+      const total = stats.approved + stats.rejected;
+      return {
+        personId,
+        personName: stats.name,
+        approvedCount: stats.approved,
+        rejectedCount: stats.rejected,
+        pendingCount: stats.pending,
+        approvalRate: total > 0 ? (stats.approved / total) * 100 : null,
+      };
+    })
+    .sort((a, b) => a.personName.localeCompare(b.personName));
+
+  // Convert bucket stats to final format
+  const byConfidence: ConfidenceBucketStats[] = bucketStats.map(b => {
+    const total = b.approved + b.rejected;
+    return {
+      minConfidence: b.min,
+      maxConfidence: b.max,
+      label: b.label,
+      approvedCount: b.approved,
+      rejectedCount: b.rejected,
+      pendingCount: b.pending,
+      approvalRate: total > 0 ? (b.approved / total) * 100 : null,
+    };
+  }).reverse(); // Show highest confidence first
+
+  // Calculate overall stats
+  const totalApproved = byPerson.reduce((sum, p) => sum + p.approvedCount, 0);
+  const totalRejected = byPerson.reduce((sum, p) => sum + p.rejectedCount, 0);
+  const totalDecisions = totalApproved + totalRejected;
+
+  return {
+    byPerson,
+    byConfidence,
+    overall: {
+      totalDecisions,
+      approvedCount: totalApproved,
+      rejectedCount: totalRejected,
+      approvalRate: totalDecisions > 0 ? (totalApproved / totalDecisions) * 100 : null,
+    },
   };
 }
 

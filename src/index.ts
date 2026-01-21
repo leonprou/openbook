@@ -17,6 +17,7 @@ import {
   photosExportCommand,
 } from "./commands/photos";
 import { statusCommand } from "./commands/status";
+import { statsCommand } from "./commands/stats";
 import { cleanupCommand } from "./commands/cleanup";
 import { clearCommand } from "./commands/clear";
 
@@ -163,6 +164,11 @@ program
   .command("status")
   .description("Show collection info and stats")
   .action(statusCommand);
+
+program
+  .command("stats")
+  .description("Show classification accuracy metrics")
+  .action(statsCommand);
 
 program
   .command("clear")
