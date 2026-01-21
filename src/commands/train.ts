@@ -62,11 +62,7 @@ export async function trainCommand(
   );
 
   // Initialize client
-  const client = new FaceRecognitionClient(
-    config.aws.region,
-    config.rekognition.collectionId,
-    config.rekognition.minConfidence
-  );
+  const client = new FaceRecognitionClient(config);
 
   // Index faces
   const progressBar = new cliProgress.SingleBar(

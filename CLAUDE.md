@@ -41,6 +41,7 @@ bun run start <command>
 |---------|-------------|
 | `claude-book init` | Initialize config and AWS Rekognition collection |
 | `claude-book status` | Show collection info and stats |
+| `claude-book stats` | Show classification accuracy metrics (per-person, by confidence) |
 | `claude-book clear [--yes]` | Clear all photos from database (keeps training data) |
 
 ### Training Commands
@@ -136,6 +137,7 @@ src/
 │   ├── scan.ts           # Scan photos and match faces
 │   ├── photos.ts         # Photo listing, approve/reject, export
 │   ├── status.ts         # Show collection stats
+│   ├── stats.ts          # Classification accuracy metrics
 │   └── cleanup.ts        # Remove AWS collection
 ├── pipeline/
 │   └── scanner.ts        # Photo scanning pipeline with parallel processing
@@ -173,7 +175,20 @@ aws:
 
 rekognition:
   collectionId: claude-book-faces
-  minConfidence: 80  # Match threshold (0-100)
+  minConfidence: 80           # Match threshold (0-100)
+  rateLimit:
+    minTime: 200              # Minimum ms between requests
+    maxConcurrent: 5          # Max concurrent API calls
+  indexing:
+    maxFaces: 1               # Faces to index per reference photo
+    qualityFilter: AUTO       # NONE, AUTO, LOW, MEDIUM, HIGH
+    detectionAttributes: DEFAULT  # DEFAULT or ALL
+  searching:
+    maxFaces: 10              # Max faces to search per photo
+
+imageProcessing:
+  maxDimension: 4096          # Max pixel dimension before resizing
+  jpegQuality: 90             # Quality for JPEG conversion (1-100)
 
 sources:
   local:
@@ -185,10 +200,22 @@ training:
   referencesPath: ./references
 
 albums:
-  prefix: "Claude Book"  # Album naming: "Claude Book: Mom"
+  prefix: "Claude Book"       # Album naming: "Claude Book: Mom"
+
+session:
+  timeoutMinutes: 15          # Session cache validity
+
+display:
+  photoLimit: 250             # Max photos shown in list output
+  progressBarWidth: 20        # Width of progress bar in characters
+  columns:
+    personName: 12            # Person name column width
+    folder: 16                # Folder column width
+    filename: 35              # Filename column width
 
 scanning:
-  concurrency: 5  # Parallel AWS requests (1-10)
+  concurrency: 10             # Parallel AWS requests (1-10)
+  maxSortBuffer: 100000       # Max files to sort in memory
 ```
 
 ## Environment Variables

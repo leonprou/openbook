@@ -37,11 +37,7 @@ export async function statusCommand(): Promise<void> {
   spinner.start("Checking collection...");
 
   try {
-    const client = new FaceRecognitionClient(
-      config.aws.region,
-      config.rekognition.collectionId,
-      config.rekognition.minConfidence
-    );
+    const client = new FaceRecognitionClient(config);
 
     const info = await client.getCollectionInfo();
 

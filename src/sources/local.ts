@@ -4,7 +4,7 @@ import type { PhotoInfo, PhotoSource } from "./types";
 import { createLogger } from "../logger";
 
 const logger = createLogger("local-source");
-const MAX_SORT_BUFFER = 100000;
+const DEFAULT_MAX_SORT_BUFFER = 100000;
 
 /**
  * Extract a Date from a filename, or null if not found.
@@ -85,6 +85,7 @@ export interface LocalPhotoSourceOptions {
   exclude?: string[];
   after?: Date;   // Only include photos after this date
   before?: Date;  // Only include photos before this date
+  maxSortBuffer?: number;  // Max files to sort in memory per directory
 }
 
 export class LocalPhotoSource implements PhotoSource {
@@ -96,6 +97,7 @@ export class LocalPhotoSource implements PhotoSource {
   private exclude?: string[];
   private after?: Date;
   private before?: Date;
+  private maxSortBuffer: number;
 
   constructor(paths: string[], extensions: string[], options?: LocalPhotoSourceOptions) {
     this.paths = paths;
@@ -105,6 +107,7 @@ export class LocalPhotoSource implements PhotoSource {
     this.exclude = options?.exclude?.map((p) => p.toLowerCase());
     this.after = options?.after;
     this.before = options?.before;
+    this.maxSortBuffer = options?.maxSortBuffer ?? DEFAULT_MAX_SORT_BUFFER;
   }
 
   async *scan(): AsyncGenerator<PhotoInfo> {
@@ -197,9 +200,9 @@ export class LocalPhotoSource implements PhotoSource {
     }
 
     // Sort and yield files (with safety limit for large directories)
-    if (files.length > MAX_SORT_BUFFER) {
+    if (files.length > this.maxSortBuffer) {
       logger.warn(
-        { directory: dirPath, fileCount: files.length, limit: MAX_SORT_BUFFER },
+        { directory: dirPath, fileCount: files.length, limit: this.maxSortBuffer },
         "Directory exceeds sort limit, yielding unsorted"
       );
       for (const photo of files) {

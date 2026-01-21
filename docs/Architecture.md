@@ -345,6 +345,19 @@ aws:
 rekognition:
   collectionId: claude-book-faces
   minConfidence: 80              # Match threshold (0-100)
+  rateLimit:
+    minTime: 200                 # Minimum ms between API requests
+    maxConcurrent: 5             # Max concurrent API calls
+  indexing:
+    maxFaces: 1                  # Faces to index per reference photo
+    qualityFilter: AUTO          # NONE, AUTO, LOW, MEDIUM, HIGH
+    detectionAttributes: DEFAULT # DEFAULT or ALL
+  searching:
+    maxFaces: 10                 # Max faces to search per photo
+
+imageProcessing:
+  maxDimension: 4096             # Max pixel dimension before resizing
+  jpegQuality: 90                # JPEG quality for conversion (1-100)
 
 sources:
   local:
@@ -357,6 +370,21 @@ training:
 
 albums:
   prefix: "Claude Book"          # Album naming: "Claude Book: Mom"
+
+session:
+  timeoutMinutes: 15             # Session cache validity
+
+display:
+  photoLimit: 250                # Max photos shown in list output
+  progressBarWidth: 20           # Progress bar width in characters
+  columns:
+    personName: 12               # Person name column width
+    folder: 16                   # Folder column width
+    filename: 35                 # Filename column width
+
+scanning:
+  concurrency: 10                # Parallel AWS requests (1-10)
+  maxSortBuffer: 100000          # Max files to sort in memory
 ```
 
 ### Environment Variables

@@ -262,9 +262,11 @@ function loadLastQuery(): LastQuery | null {
     const content = readFileSync(SESSION_FILE, "utf-8");
     const session = JSON.parse(content) as LastQuery;
 
-    // Check if session is still valid (15 minutes)
+    // Check if session is still valid
+    const config = loadConfig();
+    const timeoutMs = config.session.timeoutMinutes * 60 * 1000;
     const age = Date.now() - session.timestamp;
-    if (age > 15 * 60 * 1000) {
+    if (age > timeoutMs) {
       return null;
     }
 
@@ -418,7 +420,7 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
 
   // Print table
   console.log();
-  printPhotoTable(results);
+  printPhotoTable(results, config.display.columns);
 
   console.log();
   console.log(`Showing ${results.length} photos.`);

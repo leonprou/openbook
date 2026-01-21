@@ -17,6 +17,7 @@ import type {
   BoundingBox,
 } from "./types";
 import { createLogger } from "../logger";
+import type { Config } from "../config";
 
 const log = createLogger("rekognition");
 
@@ -25,20 +26,17 @@ export class FaceRecognitionClient {
   private collectionId: string;
   private minConfidence: number;
   private limiter: Bottleneck;
+  private config: Config;
 
-  constructor(
-    region: string,
-    collectionId: string,
-    minConfidence: number = 80
-  ) {
-    this.client = new RekognitionClient({ region });
-    this.collectionId = collectionId;
-    this.minConfidence = minConfidence;
+  constructor(config: Config) {
+    this.config = config;
+    this.client = new RekognitionClient({ region: config.aws.region });
+    this.collectionId = config.rekognition.collectionId;
+    this.minConfidence = config.rekognition.minConfidence;
 
-    // Rate limit: 5 requests per second
     this.limiter = new Bottleneck({
-      minTime: 200,
-      maxConcurrent: 5,
+      minTime: config.rekognition.rateLimit.minTime,
+      maxConcurrent: config.rekognition.rateLimit.maxConcurrent,
     });
   }
 
@@ -108,9 +106,9 @@ export class FaceRecognitionClient {
           CollectionId: this.collectionId,
           Image: { Bytes: imageBytes },
           ExternalImageId: personName,
-          MaxFaces: 1,
-          QualityFilter: "AUTO",
-          DetectionAttributes: ["DEFAULT"],
+          MaxFaces: this.config.rekognition.indexing.maxFaces,
+          QualityFilter: this.config.rekognition.indexing.qualityFilter,
+          DetectionAttributes: [this.config.rekognition.indexing.detectionAttributes],
         })
       );
 
@@ -144,7 +142,7 @@ export class FaceRecognitionClient {
           new SearchFacesByImageCommand({
             CollectionId: this.collectionId,
             Image: { Bytes: imageBytes },
-            MaxFaces: 10,
+            MaxFaces: this.config.rekognition.searching.maxFaces,
             FaceMatchThreshold: this.minConfidence,
           })
         );
@@ -220,7 +218,7 @@ export class FaceRecognitionClient {
 
     // Resize if too large (Rekognition has 5MB limit)
     const metadata = await sharp(buffer).metadata();
-    const maxDimension = 4096;
+    const { maxDimension, jpegQuality } = this.config.imageProcessing;
 
     log.debug(
       { imagePath, format: metadata.format, width: metadata.width, height: metadata.height, size: buffer.length },
@@ -234,7 +232,7 @@ export class FaceRecognitionClient {
       log.debug({ imagePath }, "Resizing large image");
       return await sharp(buffer)
         .resize(maxDimension, maxDimension, { fit: "inside" })
-        .jpeg({ quality: 90 })
+        .jpeg({ quality: jpegQuality })
         .toBuffer();
     }
 
@@ -244,7 +242,7 @@ export class FaceRecognitionClient {
       metadata.format === "heif"
     ) {
       log.debug({ imagePath }, "Converting HEIC to JPEG");
-      return await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
+      return await sharp(buffer).jpeg({ quality: jpegQuality }).toBuffer();
     }
 
     return buffer;

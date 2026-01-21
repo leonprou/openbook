@@ -26,11 +26,7 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
   spinner.start("Deleting collection...");
 
   try {
-    const client = new FaceRecognitionClient(
-      config.aws.region,
-      config.rekognition.collectionId,
-      config.rekognition.minConfidence
-    );
+    const client = new FaceRecognitionClient(config);
 
     await client.deleteCollection();
     spinner.succeed("Collection deleted successfully");

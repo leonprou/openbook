@@ -29,11 +29,7 @@ export async function initCommand(): Promise<void> {
   // Create AWS Rekognition collection
   spinner.start("Creating AWS Rekognition collection...");
   try {
-    const client = new FaceRecognitionClient(
-      config.aws.region,
-      config.rekognition.collectionId,
-      config.rekognition.minConfidence
-    );
+    const client = new FaceRecognitionClient(config);
     await client.createCollection();
     spinner.succeed(
       `AWS Rekognition collection ready: ${config.rekognition.collectionId}`

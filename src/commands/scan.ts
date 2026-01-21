@@ -130,11 +130,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   // Check collection exists
   spinner.start("Checking face collection...");
-  const client = new FaceRecognitionClient(
-    config.aws.region,
-    config.rekognition.collectionId,
-    config.rekognition.minConfidence
-  );
+  const client = new FaceRecognitionClient(config);
 
   const collectionInfo = await client.getCollectionInfo();
   if (!collectionInfo || collectionInfo.faceCount === 0) {
@@ -149,6 +145,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     exclude: options.exclude,
     after: options.after,
     before: options.before,
+    maxSortBuffer: config.scanning.maxSortBuffer,
   };
 
   // Count photos
@@ -235,7 +232,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       format: useNewScansProgress
         ? "Scanning |{bar}| {percentage}% | {value}/{total} new | Matched: {matched} | {file}"
         : "Scanning |{bar}| {percentage}% | {value}/{total} | Matched: {matched} | Cached: {cached} | {file}",
-      barsize: 20,
+      barsize: config.display.progressBarWidth,
     },
     cliProgress.Presets.shades_classic
   );
@@ -355,7 +352,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   const displayMatches = allMatches.slice(0, TABLE_LIMIT);
 
   console.log("\nFound Photos:");
-  printPhotoTable(displayMatches);
+  printPhotoTable(displayMatches, config.display.columns);
 
   if (allMatches.length > TABLE_LIMIT) {
     console.log(`\nShowing ${TABLE_LIMIT} of ${allMatches.length} photos.`);
