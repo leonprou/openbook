@@ -557,6 +557,14 @@ export function clearDirectoryCaches(): number {
   return count;
 }
 
+export function removeDirectoryCache(pathPrefix: string): number {
+  const database = getDb();
+  const result = database.query(
+    "DELETE FROM directories WHERE path = $path OR path LIKE $prefix"
+  ).run({ $path: pathPrefix, $prefix: pathPrefix + "/%" });
+  return result.changes;
+}
+
 export function getDirectoryCacheStats(): { directories: number; files: number } {
   const database = getDb();
   const row = database.query(

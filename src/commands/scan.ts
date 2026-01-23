@@ -24,6 +24,7 @@ import {
   clearAllScans,
   getDirectoryCache,
   saveDirectoryCache,
+  removeDirectoryCache,
   type Photo,
   type Scan,
 } from "../db";
@@ -217,6 +218,18 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     }
 
     if (files.length > 0) {
+      // Directory summary
+      const dirCounts = new Map<string, number>();
+      for (const f of files) {
+        const folder = dirname(f.path).split("/").slice(-2).join("/");
+        dirCounts.set(folder, (dirCounts.get(folder) ?? 0) + 1);
+      }
+      const maxDirLen = Math.max(...[...dirCounts.keys()].map((d) => d.length));
+      console.log("\nDirectories:");
+      for (const [dir, count] of [...dirCounts.entries()].sort((a, b) => b[1] - a[1])) {
+        console.log(`  ${dir.padEnd(maxDirLen + 2)}${String(count).padStart(3)} photos`);
+      }
+
       console.log("\nFiles to scan:");
       console.log(" #    Date        Folder                          Filename");
       console.log("─".repeat(95));
@@ -292,14 +305,15 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Create scan-phase source with a checker that persists directory mtimes
+  // Collect directory cache entries in memory; only persist on successful completion
+  const pendingDirCache: Array<{ dirPath: string; mtimeMs: number; fileCount: number }> = [];
   const scanChecker: DirectoryChecker | undefined = options.rescan ? undefined : {
     shouldSkip(dirPath: string, mtimeMs: number) {
       const cached = getDirectoryCache(dirPath);
       return (cached && cached.mtimeMs === mtimeMs) ? cached.fileCount : null;
     },
     onScanned(dirPath: string, mtimeMs: number, fileCount: number) {
-      saveDirectoryCache(dirPath, mtimeMs, fileCount, scanId);
+      pendingDirCache.push({ dirPath, mtimeMs, fileCount });
     },
   };
   const freshSource = new LocalPhotoSource(paths, config.sources.local.extensions, {
@@ -350,6 +364,11 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   // Complete scan record
   const durationMs = completeScan(scanId, stats);
+
+  // Persist directory cache now that scan completed successfully
+  for (const entry of pendingDirCache) {
+    saveDirectoryCache(entry.dirPath, entry.mtimeMs, entry.fileCount, scanId);
+  }
 
   // Update person photo counts
   updateAllPersonPhotoCounts();
@@ -632,4 +651,18 @@ export async function scanClearCommand(options: ScanClearOptions = {}): Promise<
 
   const result = clearAllScans();
   console.log(`Cleared ${result.scansCleared} scan(s) and reset ${result.photosReset} photo(s).`);
+}
+
+/**
+ * scan uncache - Remove a directory from the cache so it gets re-scanned
+ */
+export function scanUncacheCommand(dirPath: string): void {
+  initDatabase();
+  const resolved = expandPath(dirPath);
+  const removed = removeDirectoryCache(resolved);
+  if (removed > 0) {
+    console.log(`Removed ${removed} director${removed === 1 ? "y" : "ies"} from cache.`);
+  } else {
+    console.log(`No cached entries found for: ${resolved}`);
+  }
 }

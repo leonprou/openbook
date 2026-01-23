@@ -8,6 +8,7 @@ import {
   scanListHistoryCommand,
   scanShowCommand,
   scanClearCommand,
+  scanUncacheCommand,
 } from "./commands/scan";
 import {
   photosListCommand,
@@ -105,6 +106,12 @@ scan
   .description("Clear all scan history and reset photo recognitions")
   .option("-y, --yes", "Skip confirmation prompt")
   .action(scanClearCommand);
+
+scan
+  .command("uncache")
+  .description("Remove directory from cache (will be re-scanned next time)")
+  .argument("<path>", "Directory path to uncache")
+  .action((path) => scanUncacheCommand(path));
 
 // Photos command group
 const photos = program
