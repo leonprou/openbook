@@ -98,6 +98,8 @@ bun run start <command>
 | `claude-book photos --json` | Output as JSON |
 | `claude-book photos --min-confidence 80` | Filter by confidence >= 80% |
 | `claude-book photos --max-confidence 70` | Filter by confidence <= 70% |
+| `claude-book photos --page 2` | Show page 2 of results |
+| `claude-book photos --per-page 25` | Set results per page (default: 50) |
 | `claude-book photos approve <indexes>` | Approve by index (1,2,4-6) |
 | `claude-book photos approve --all` | Approve all in current list |
 | `claude-book photos approve --all --without 3,5` | Approve all except indexes |
@@ -228,6 +230,7 @@ session:
 
 display:
   photoLimit: 250             # Max photos shown in list output
+  pageSize: 50                # Results per page (with --page)
   progressBarWidth: 20        # Width of progress bar in characters
   columns:
     personName: 12            # Person name column width

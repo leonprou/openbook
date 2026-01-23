@@ -322,8 +322,10 @@ claude-book photos [options]
 | `--status <status>` | Filter by status (see below) |
 | `--scan <id>` | Filter by scan ID |
 | `--open` | Open photos in Preview app |
-| `--limit <n>` | Max results (default: 50) |
+| `--limit <n>` | Max results (default: 250) |
 | `--offset <n>` | Skip first n results |
+| `-p, --page <n>` | Page number (1-indexed) |
+| `--per-page <n>` | Results per page (default: 50, from config) |
 | `--json` | Output as JSON |
 
 **Status values:**
@@ -364,7 +366,8 @@ $ claude-book photos --person "Mom" --status pending --scan 15
 $ claude-book photos --person "Mom" --open
 
 # Paginate through results
-$ claude-book photos --limit 50 --offset 100
+$ claude-book photos --page 2
+$ claude-book photos --page 3 --per-page 25
 
 # JSON output for scripting
 $ claude-book photos --json

@@ -116,6 +116,8 @@ const photos = program
   .option("-o, --open", "Open photos in Preview")
   .option("-l, --limit <number>", "Limit results", parseInt)
   .option("--offset <number>", "Skip first n results", parseInt)
+  .option("-p, --page <number>", "Page number (1-indexed)", parseInt)
+  .option("--per-page <number>", "Results per page (default: from config)", parseInt)
   .option("--json", "Output as JSON")
   .action(photosListCommand);
 

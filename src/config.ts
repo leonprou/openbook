@@ -64,6 +64,7 @@ const configSchema = z.object({
   display: z
     .object({
       photoLimit: z.number().min(1).max(1000).default(250),
+      pageSize: z.number().min(10).max(500).default(50),
       progressBarWidth: z.number().min(10).max(100).default(20),
       columns: z
         .object({
@@ -173,6 +174,7 @@ session:
 
 display:
   photoLimit: 250           # Max photos shown in list output
+  pageSize: 50              # Results per page (with --page)
   progressBarWidth: 20      # Width of progress bar in characters
   columns:
     personName: 12          # Person name column width

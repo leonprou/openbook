@@ -128,7 +128,7 @@ function getRecognitionStatus(
 /**
  * Query photos with filters
  */
-function queryPhotos(filter: PhotoFilter): PhotoResult[] {
+function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: number } {
   const db = new Database(resolve(process.cwd(), ".claude-book.db"));
   const results: PhotoResult[] = [];
 
@@ -230,11 +230,19 @@ function queryPhotos(filter: PhotoFilter): PhotoResult[] {
 
   db.close();
 
+  // Sort chronologically before pagination
+  results.sort((a, b) => {
+    const keyA = extractSortKeyForDisplay(basename(a.path));
+    const keyB = extractSortKeyForDisplay(basename(b.path));
+    return keyA.localeCompare(keyB);
+  });
+
   // Apply offset and limit
+  const total = results.length;
   const offset = filter.offset ?? 0;
   const limit = filter.limit ?? 250;
 
-  return results.slice(offset, offset + limit);
+  return { results: results.slice(offset, offset + limit), total };
 }
 
 /**
@@ -312,6 +320,8 @@ interface PhotosListOptions {
   open?: boolean;
   limit?: number;
   offset?: number;
+  page?: number;
+  perPage?: number;
   json?: boolean;
   minConfidence?: number;
   maxConfidence?: number;
@@ -378,28 +388,34 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
     scanId = parseInt(options.scan, 10);
   }
 
+  // Calculate pagination
+  const perPage = options.perPage ?? config.display.pageSize;
+  let offset: number;
+  let limit: number;
+
+  if (options.page !== undefined) {
+    offset = (options.page - 1) * perPage;
+    limit = perPage;
+  } else {
+    offset = options.offset ?? 0;
+    limit = options.limit ?? config.display.photoLimit;
+  }
+
   const filter: PhotoFilter = {
     person: options.person,
     status,
     scanId,
-    limit: options.limit ?? config.display.photoLimit,
-    offset: options.offset ?? 0,
+    limit,
+    offset,
     minConfidence: options.minConfidence,
     maxConfidence: options.maxConfidence,
   };
 
-  const results = queryPhotos(filter);
+  const { results, total } = queryPhotos(filter);
 
-  // Sort results chronologically by filename
-  results.sort((a, b) => {
-    const keyA = extractSortKeyForDisplay(basename(a.path));
-    const keyB = extractSortKeyForDisplay(basename(b.path));
-    return keyA.localeCompare(keyB);
-  });
-
-  // Re-assign indexes after sorting
+  // Re-assign indexes (global indexes when paginating)
   results.forEach((photo, i) => {
-    photo.index = i + 1;
+    photo.index = offset + i + 1;
   });
 
   if (results.length === 0) {
@@ -414,7 +430,12 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
   saveLastQuery(filter, results);
 
   if (options.json) {
-    console.log(JSON.stringify(results, null, 2));
+    if (options.page !== undefined) {
+      const totalPages = Math.ceil(total / perPage);
+      console.log(JSON.stringify({ page: options.page, perPage, totalPages, total, results }, null, 2));
+    } else {
+      console.log(JSON.stringify(results, null, 2));
+    }
     return;
   }
 
@@ -423,7 +444,14 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
   printPhotoTable(results, config.display.columns);
 
   console.log();
-  console.log(`Showing ${results.length} photos.`);
+  if (options.page !== undefined) {
+    const totalPages = Math.ceil(total / perPage);
+    const startIdx = offset + 1;
+    const endIdx = offset + results.length;
+    console.log(`Showing ${startIdx}-${endIdx} of ${total} photos (page ${options.page} of ${totalPages}).`);
+  } else {
+    console.log(`Showing ${results.length} photos.`);
+  }
 
   // Open photos in Preview if requested
   if (options.open && results.length > 0) {
@@ -474,7 +502,7 @@ export async function photosApproveCommand(
       minConfidence: options.minConfidence,
       maxConfidence: options.maxConfidence,
     };
-    toApprove = queryPhotos(filter);
+    toApprove = queryPhotos(filter).results;
 
     // Exclude specified indexes (if any)
     if (options.without) {
@@ -634,7 +662,7 @@ export async function photosRejectCommand(
       minConfidence: options.minConfidence,
       maxConfidence: options.maxConfidence,
     };
-    toReject = queryPhotos(filter);
+    toReject = queryPhotos(filter).results;
 
     // Exclude specified indexes (if any)
     if (options.without) {
@@ -762,7 +790,7 @@ async function rejectByMaxConfidence(
     limit: 1000, // Get all pending
   };
 
-  const results = queryPhotos(filter);
+  const { results } = queryPhotos(filter);
   const toReject = results.filter((p) => p.confidence <= maxConfidence);
 
   if (toReject.length === 0) {
@@ -922,7 +950,7 @@ export async function photosExportCommand(options: PhotosExportOptions): Promise
     limit: 10000, // Get all approved
   };
 
-  const results = queryPhotos(filter);
+  const { results } = queryPhotos(filter);
 
   if (results.length === 0) {
     console.log("No approved photos to export.");
