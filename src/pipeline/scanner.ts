@@ -81,6 +81,7 @@ export class PhotoScanner {
    */
   validateSearchMode(): void {
     const persons = getAllPersons();
+    this.client.setPersonNames(persons);
 
     if (this.searchMethod === "users") {
       const missingUsers = persons.filter(p => !p.userId);

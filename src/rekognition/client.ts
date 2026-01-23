@@ -33,6 +33,7 @@ export class FaceRecognitionClient {
   private minConfidence: number;
   private limiter: Bottleneck;
   private config: Config;
+  private userIdToName: Map<string, string> = new Map();
 
   constructor(config: Config) {
     this.config = config;
@@ -44,6 +45,23 @@ export class FaceRecognitionClient {
       minTime: config.rekognition.rateLimit.minTime,
       maxConcurrent: config.rekognition.rateLimit.maxConcurrent,
     });
+  }
+
+  /**
+   * Set canonical person names for userId resolution.
+   * Maps userId (e.g., "user_ada") to the correct display name (e.g., "Ada").
+   */
+  setPersonNames(persons: Array<{ name: string }>): void {
+    this.userIdToName.clear();
+    for (const person of persons) {
+      const userId = `user_${person.name.toLowerCase().replace(/\s+/g, "_")}`;
+      this.userIdToName.set(userId, person.name);
+    }
+  }
+
+  private resolvePersonName(userId: string): string {
+    return this.userIdToName.get(userId)
+      ?? (userId.startsWith("user_") ? userId.slice(5).replace(/_/g, " ") : userId);
   }
 
   async createCollection(): Promise<void> {
@@ -310,11 +328,8 @@ export class FaceRecognitionClient {
 
         for (const userMatch of response.UserMatches ?? []) {
           if (userMatch.User && userMatch.Similarity) {
-            // Extract person name from user ID (user_personname -> personname)
             const userId = userMatch.User.UserId ?? "";
-            const personName = userId.startsWith("user_")
-              ? userId.slice(5).replace(/_/g, " ")
-              : userId;
+            const personName = this.resolvePersonName(userId);
 
             matches.push({
               userId,
@@ -363,11 +378,7 @@ export class FaceRecognitionClient {
 
       for (const user of response.Users ?? []) {
         const userId = user.UserId ?? "";
-        // Extract person name from user ID
-        const personName = userId.startsWith("user_")
-          ? userId.slice(5).replace(/_/g, " ")
-          : userId;
-        users.set(userId, personName);
+        users.set(userId, this.resolvePersonName(userId));
       }
 
       nextToken = response.NextToken;
