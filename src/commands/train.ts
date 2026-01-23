@@ -9,6 +9,7 @@ import { initDatabase, createPerson, updatePersonFaceCount, updatePersonUserId, 
 
 interface TrainOptions {
   references?: string;
+  person?: string;
 }
 
 export async function trainCommand(
@@ -39,6 +40,33 @@ export async function trainCommand(
     referencesPath,
     config.sources.local.extensions
   );
+
+  // Filter to a specific person if --person is provided
+  if (options.person) {
+    let matchedName: string | null = null;
+    for (const name of people.keys()) {
+      if (name.toLowerCase() === options.person.toLowerCase()) {
+        matchedName = name;
+        break;
+      }
+    }
+
+    if (!matchedName) {
+      spinner.fail(`Person "${options.person}" not found in references.`);
+      if (people.size > 0) {
+        console.error("\nAvailable people:");
+        for (const [name, photos] of people) {
+          console.error(`  - ${name} (${photos.length} photos)`);
+        }
+      }
+      process.exit(1);
+    }
+
+    // Keep only the matched person
+    const matchedPhotos = people.get(matchedName)!;
+    people.clear();
+    people.set(matchedName, matchedPhotos);
+  }
 
   if (people.size === 0) {
     spinner.fail(`No reference photos found in: ${referencesPath}`);
@@ -147,6 +175,10 @@ export async function trainCommand(
   } else {
     console.log("\nSearch method: faces (individual vectors)");
     console.log("Tip: Set 'searchMethod: users' in config.yaml for better accuracy with 5+ reference photos.");
+  }
+
+  if (totalIndexed === 0) {
+    process.exit(1);
   }
 }
 

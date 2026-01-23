@@ -40,6 +40,7 @@ const train = program
   .description("Index faces from reference folders")
   .argument("[path]", "Path to references folder")
   .option("-r, --references <path>", "Path to references folder (deprecated, use positional)")
+  .option("--person <name>", "Train only a specific person")
   .action(trainCommand);
 
 train

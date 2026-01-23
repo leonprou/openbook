@@ -13,7 +13,8 @@ CLI tool for organizing family photos using face recognition with AWS Rekognitio
 ### Important for Claude
 
 1. **Before planning**: Read `docs/Architecture.md` to understand system design and data flows
-2. **Before committing**: Update relevant documentation if changes affect:
+2. **Before training**: Always ask the user for explicit approval before running `bun run start train`. Never run training automatically.
+3. **Before committing**: Update relevant documentation if changes affect:
    - CLI commands or options → update `CLAUDE.md` and `docs/MANUAL.md`
    - Architecture or data models → update `docs/Architecture.md`
    - User-facing features → update `README.md`
@@ -30,7 +31,7 @@ When the user asks to find, show, or review photos (e.g. "show me photos of Mom"
    - `--after YYYY-MM-DD` / `--before YYYY-MM-DD` to filter by photo capture date
    - `--json` for structured output you can parse and summarize
 
-2. **Present results**: Summarize the output for the user — show counts, list file paths, and highlight key details (person, confidence, status). If the user wants to visually inspect photos, use `--open` to open them in Preview.
+2. **Present results**: Summarize the output for the user — show counts, list file paths, and highlight key details (person, confidence, status). When the user asks to "show" photos, always include `--open` to open them in Preview automatically.
 
 3. **Take action**: If the user wants to approve, reject, or add recognitions based on what they see, use the corresponding subcommands (`photos approve`, `photos reject`, `photos add`).
 
@@ -70,6 +71,7 @@ bun run start <command>
 |---------|-------------|
 | `claude-book train <path>` | Index faces from reference folders |
 | `claude-book train` | Use path from config.yaml |
+| `claude-book train --person "Nina"` | Train only a specific person |
 | `claude-book train cleanup [--yes]` | Remove AWS Rekognition collection |
 
 ### Scan Commands
