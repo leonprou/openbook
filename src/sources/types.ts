@@ -4,6 +4,7 @@ export interface PhotoInfo {
   extension: string;
   size: number;
   modifiedAt: Date;
+  photoDate?: string;  // ISO 8601 date string
 }
 
 export interface PhotoSource {

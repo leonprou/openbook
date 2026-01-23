@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
-import { resolve } from "path";
+import { basename, resolve } from "path";
+import { getPhotoDateISO } from "../utils/date";
 
 const DB_FILE = ".claude-book.db";
 
@@ -55,6 +56,7 @@ export interface Photo {
   lastScanId: number | null;
   recognitions: Recognition[];
   corrections: Correction[];
+  photoDate: string | null;
 }
 
 export interface ScanStats {
@@ -190,6 +192,34 @@ export function initDatabase(): void {
     database.exec("ALTER TABLE persons ADD COLUMN user_id TEXT");
   } catch {
     // Column already exists, ignore error
+  }
+
+  // Migration: add photo_date column to photos table
+  try {
+    database.exec("ALTER TABLE photos ADD COLUMN photo_date TEXT");
+  } catch {
+    // Column already exists, ignore error
+  }
+  database.exec("CREATE INDEX IF NOT EXISTS idx_photos_photo_date ON photos(photo_date)");
+
+  // Backfill photo_date for existing records
+  const nullDateRows = database.query(
+    "SELECT hash, path FROM photos WHERE photo_date IS NULL"
+  ).all() as Array<{ hash: string; path: string }>;
+
+  if (nullDateRows.length > 0) {
+    const updateStmt = database.prepare(
+      "UPDATE photos SET photo_date = $photoDate WHERE hash = $hash"
+    );
+
+    database.exec("BEGIN");
+    for (const row of nullDateRows) {
+      const photoDate = getPhotoDateISO(row.path, basename(row.path));
+      if (photoDate) {
+        updateStmt.run({ $photoDate: photoDate, $hash: row.hash });
+      }
+    }
+    database.exec("COMMIT");
   }
 }
 
@@ -517,6 +547,7 @@ export function getPhotoByHash(hash: string): Photo | null {
     last_scan_id: number | null;
     recognitions: string | null;
     corrections: string | null;
+    photo_date: string | null;
   } | null;
 
   if (!row) return null;
@@ -530,6 +561,7 @@ export function getPhotoByHash(hash: string): Photo | null {
     lastScanId: row.last_scan_id,
     recognitions: row.recognitions ? JSON.parse(row.recognitions) : [],
     corrections: row.corrections ? JSON.parse(row.corrections) : [],
+    photoDate: row.photo_date,
   };
 }
 
@@ -538,20 +570,22 @@ export function savePhoto(
   path: string,
   fileSize: number | null,
   scanId: number,
-  recognitions: Recognition[]
+  recognitions: Recognition[],
+  photoDate: string | null = null
 ): void {
   const database = getDb();
   const now = new Date().toISOString();
 
   const stmt = database.query(`
-    INSERT INTO photos (hash, path, file_size, first_scanned_at, last_scanned_at, last_scan_id, recognitions, corrections)
-    VALUES ($hash, $path, $fileSize, $now, $now, $scanId, $recognitions, '[]')
+    INSERT INTO photos (hash, path, file_size, first_scanned_at, last_scanned_at, last_scan_id, recognitions, corrections, photo_date)
+    VALUES ($hash, $path, $fileSize, $now, $now, $scanId, $recognitions, '[]', $photoDate)
     ON CONFLICT(hash) DO UPDATE SET
       path = excluded.path,
       file_size = excluded.file_size,
       last_scanned_at = excluded.last_scanned_at,
       last_scan_id = excluded.last_scan_id,
-      recognitions = excluded.recognitions
+      recognitions = excluded.recognitions,
+      photo_date = COALESCE(photos.photo_date, excluded.photo_date)
   `);
 
   stmt.run({
@@ -561,6 +595,7 @@ export function savePhoto(
     $now: now,
     $scanId: scanId,
     $recognitions: JSON.stringify(recognitions),
+    $photoDate: photoDate,
   });
 }
 
@@ -601,6 +636,7 @@ export function getPhotosByScan(scanId: number): Photo[] {
     last_scan_id: number | null;
     recognitions: string | null;
     corrections: string | null;
+    photo_date: string | null;
   }>;
 
   return rows.map((row) => ({
@@ -612,6 +648,7 @@ export function getPhotosByScan(scanId: number): Photo[] {
     lastScanId: row.last_scan_id,
     recognitions: row.recognitions ? JSON.parse(row.recognitions) : [],
     corrections: row.corrections ? JSON.parse(row.corrections) : [],
+    photoDate: row.photo_date,
   }));
 }
 

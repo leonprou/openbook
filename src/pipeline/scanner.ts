@@ -163,7 +163,7 @@ export class PhotoScanner {
           recognitions = await this.searchAndConvert(photo.path);
 
           // Save to database
-          savePhoto(photoHash, photo.path, fileInfo.size, scanId, recognitions);
+          savePhoto(photoHash, photo.path, fileInfo.size, scanId, recognitions, photo.photoDate ?? null);
           saveRecognitionHistory(photoHash, scanId, recognitions);
 
           // Track new scans for limit
@@ -380,7 +380,7 @@ export class PhotoScanner {
         log.debug({ photo: result.photo.path, hash: result.hash }, "Using cached result");
       } else {
         // Save to database
-        savePhoto(result.hash, result.photo.path, result.fileSize, scanId, result.recognitions);
+        savePhoto(result.hash, result.photo.path, result.fileSize, scanId, result.recognitions, result.photo.photoDate ?? null);
         saveRecognitionHistory(result.hash, scanId, result.recognitions);
         newScans++;
       }

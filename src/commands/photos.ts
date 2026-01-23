@@ -68,6 +68,8 @@ interface PhotoFilter {
   offset?: number;
   minConfidence?: number;
   maxConfidence?: number;
+  after?: string;   // ISO 8601 date string
+  before?: string;  // ISO 8601 date string
 }
 
 interface PhotoResult {
@@ -132,27 +134,40 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
   const db = new Database(resolve(process.cwd(), ".claude-book.db"));
   const results: PhotoResult[] = [];
 
-  // Build query based on filters
-  // Show all photos by default, use --person all to filter to only recognized
-  let query: string;
+  // Build query with conditions
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = {};
+
   if (filter.scanId) {
-    query = `SELECT * FROM photos WHERE last_scan_id = ${filter.scanId}`;
-  } else if (filter.person === "all") {
-    // --person all: show only photos with recognitions
-    query = "SELECT * FROM photos WHERE recognitions IS NOT NULL AND recognitions != '[]'";
-  } else {
-    query = "SELECT * FROM photos";
+    conditions.push("last_scan_id = $scanId");
+    params.$scanId = filter.scanId;
+  }
+  if (filter.person === "all") {
+    conditions.push("recognitions IS NOT NULL AND recognitions != '[]'");
+  }
+  if (filter.after) {
+    conditions.push("photo_date >= $after");
+    params.$after = filter.after;
+  }
+  if (filter.before) {
+    conditions.push("photo_date <= $before");
+    params.$before = filter.before;
   }
 
-  query += " ORDER BY last_scanned_at DESC";
+  let query = "SELECT * FROM photos";
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+  query += " ORDER BY photo_date ASC, last_scanned_at DESC";
 
-  const rows = db.query(query).all() as Array<{
+  const rows = db.query(query).all(params as Record<string, string | number>) as Array<{
     hash: string;
     path: string;
     recognitions: string;
     corrections: string | null;
     last_scan_id: number | null;
     last_scanned_at: string;
+    photo_date: string | null;
   }>;
 
   let index = 1;
@@ -163,13 +178,17 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
       ? JSON.parse(row.corrections)
       : [];
 
-    // Extract date from filename, fallback to file mtime
+    // Use stored photo_date, fallback to extracting from filename
     let photoDate: Date | undefined;
-    try {
-      const filename = basename(row.path);
-      photoDate = extractDateFromFilename(filename) ?? statSync(row.path).mtime;
-    } catch {
-      // File may not exist anymore
+    if (row.photo_date) {
+      photoDate = new Date(row.photo_date);
+    } else {
+      try {
+        const filename = basename(row.path);
+        photoDate = extractDateFromFilename(filename) ?? statSync(row.path).mtime;
+      } catch {
+        // File may not exist anymore
+      }
     }
 
     // Also include false negatives (manually added matches)
@@ -325,6 +344,8 @@ interface PhotosListOptions {
   json?: boolean;
   minConfidence?: number;
   maxConfidence?: number;
+  after?: Date;
+  before?: Date;
 }
 
 interface PhotosApproveOptions {
@@ -409,6 +430,8 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
     offset,
     minConfidence: options.minConfidence,
     maxConfidence: options.maxConfidence,
+    after: options.after?.toISOString(),
+    before: options.before?.toISOString(),
   };
 
   const { results, total } = queryPhotos(filter);

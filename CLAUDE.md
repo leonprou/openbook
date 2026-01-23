@@ -27,6 +27,7 @@ When the user asks to find, show, or review photos (e.g. "show me photos of Mom"
    - `--status pending|approved|rejected|manual|all` to filter by review status
    - `--scan <id>` to filter by scan run
    - `--min-confidence N` / `--max-confidence N` to filter by recognition confidence
+   - `--after YYYY-MM-DD` / `--before YYYY-MM-DD` to filter by photo capture date
    - `--json` for structured output you can parse and summarize
 
 2. **Present results**: Summarize the output for the user — show counts, list file paths, and highlight key details (person, confidence, status). If the user wants to visually inspect photos, use `--open` to open them in Preview.
@@ -98,6 +99,8 @@ bun run start <command>
 | `claude-book photos --json` | Output as JSON |
 | `claude-book photos --min-confidence 80` | Filter by confidence >= 80% |
 | `claude-book photos --max-confidence 70` | Filter by confidence <= 70% |
+| `claude-book photos --after 2025-01-01` | Filter photos taken after date |
+| `claude-book photos --before 2025-06-30` | Filter photos taken before date |
 | `claude-book photos --page 2` | Show page 2 of results |
 | `claude-book photos --per-page 25` | Set results per page (default: 50) |
 | `claude-book photos approve <indexes>` | Approve by index (1,2,4-6) |

@@ -2,40 +2,12 @@ import { readdirSync, statSync } from "fs";
 import { join, extname, basename } from "path";
 import type { PhotoInfo, PhotoSource } from "./types";
 import { createLogger } from "../logger";
+import { extractDateFromFilename } from "../utils/date";
+
+export { extractDateFromFilename } from "../utils/date";
 
 const logger = createLogger("local-source");
 const DEFAULT_MAX_SORT_BUFFER = 100000;
-
-/**
- * Extract a Date from a filename, or null if not found.
- */
-export function extractDateFromFilename(filename: string): Date | null {
-  // Pattern 1: Telegram format - photo_<id>@DD-MM-YYYY_HH-MM-SS
-  const telegramMatch = filename.match(
-    /(\d+)@(\d{2})-(\d{2})-(\d{4})_(\d{2})-(\d{2})-(\d{2})/
-  );
-  if (telegramMatch) {
-    const [, , d, m, y, h, min, s] = telegramMatch;
-    return new Date(
-      parseInt(y), parseInt(m) - 1, parseInt(d),
-      parseInt(h), parseInt(min), parseInt(s)
-    );
-  }
-
-  // Pattern 2: YYYYMMDD with optional HHMMSS
-  const dateTimeMatch = filename.match(
-    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_]?(\d{2})?[-_]?(\d{2})?[-_]?(\d{2})?/
-  );
-  if (dateTimeMatch) {
-    const [, y, m, d, h = "0", min = "0", s = "0"] = dateTimeMatch;
-    return new Date(
-      parseInt(y), parseInt(m) - 1, parseInt(d),
-      parseInt(h), parseInt(min), parseInt(s)
-    );
-  }
-
-  return null;
-}
 
 /**
  * Extract a sortable key from a filename for chronological ordering.
@@ -185,12 +157,14 @@ export class LocalPhotoSource implements PhotoSource {
               }
             }
 
+            const photoDate = extractDateFromFilename(entry.name) ?? stats.mtime;
             files.push({
               path: fullPath,
               filename: basename(entry.name, ext),
               extension: ext,
               size: stats.size,
               modifiedAt: stats.mtime,
+              photoDate: photoDate.toISOString(),
             });
           } catch {
             // File not accessible, skip

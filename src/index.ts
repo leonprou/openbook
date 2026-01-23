@@ -113,6 +113,8 @@ const photos = program
   .option("--scan <id>", "Filter by scan ID (use 'latest' for most recent)")
   .option("--min-confidence <n>", "Filter photos with confidence >= n%", parseInt)
   .option("--max-confidence <n>", "Filter photos with confidence <= n%", parseInt)
+  .option("--after <date>", "Only include photos after date (YYYY-MM-DD)", parseDate)
+  .option("--before <date>", "Only include photos before date (YYYY-MM-DD)", parseDate)
   .option("-o, --open", "Open photos in Preview")
   .option("-l, --limit <number>", "Limit results", parseInt)
   .option("--offset <number>", "Skip first n results", parseInt)

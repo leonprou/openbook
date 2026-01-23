@@ -321,6 +321,8 @@ claude-book photos [options]
 | `--person <name>` | Filter by person name (use `all` for any recognized) |
 | `--status <status>` | Filter by status (see below) |
 | `--scan <id>` | Filter by scan ID |
+| `--after <date>` | Only include photos after date (YYYY-MM-DD) |
+| `--before <date>` | Only include photos before date (YYYY-MM-DD) |
 | `--open` | Open photos in Preview app |
 | `--limit <n>` | Max results (default: 250) |
 | `--offset <n>` | Skip first n results |
@@ -364,6 +366,10 @@ $ claude-book photos --person "Mom" --status pending --scan 15
 
 # Open in Preview for visual review
 $ claude-book photos --person "Mom" --open
+
+# Filter by date range
+$ claude-book photos --person "Mom" --after 2025-01-01
+$ claude-book photos --after 2025-06-01 --before 2025-08-31
 
 # Paginate through results
 $ claude-book photos --page 2
