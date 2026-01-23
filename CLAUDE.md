@@ -176,6 +176,7 @@ aws:
 rekognition:
   collectionId: claude-book-faces
   minConfidence: 80           # Match threshold (0-100)
+  searchMethod: faces         # "faces" (individual) or "users" (aggregated vectors)
   rateLimit:
     minTime: 200              # Minimum ms between requests
     maxConcurrent: 5          # Max concurrent API calls
@@ -185,6 +186,7 @@ rekognition:
     detectionAttributes: DEFAULT  # DEFAULT or ALL
   searching:
     maxFaces: 10              # Max faces to search per photo
+    maxUsers: 10              # Max users to search per photo (when searchMethod: users)
 
 imageProcessing:
   maxDimension: 4096          # Max pixel dimension before resizing

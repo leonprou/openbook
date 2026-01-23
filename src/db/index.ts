@@ -11,6 +11,7 @@ export interface Person {
   trainedAt: string;
   faceCount: number;
   photoCount: number;
+  userId: string | null;  // AWS Rekognition User ID for aggregated vectors
 }
 
 export interface Scan {
@@ -35,6 +36,7 @@ export interface Recognition {
     width: number;
     height: number;
   };
+  searchMethod?: "faces" | "users";  // Track which search method found this match
 }
 
 export interface Correction {
@@ -91,9 +93,18 @@ export interface ConfidenceBucketStats {
   approvalRate: number | null;
 }
 
+export interface SearchMethodStats {
+  method: "faces" | "users";
+  approvedCount: number;
+  rejectedCount: number;
+  pendingCount: number;
+  approvalRate: number | null;
+}
+
 export interface AccuracyStats {
   byPerson: PersonAccuracyStats[];
   byConfidence: ConfidenceBucketStats[];
+  bySearchMethod: SearchMethodStats[];
   overall: {
     totalDecisions: number;
     approvedCount: number;
@@ -173,6 +184,13 @@ export function initDatabase(): void {
   } catch {
     // Column already exists, ignore error
   }
+
+  // Migration: add user_id column to persons table
+  try {
+    database.exec("ALTER TABLE persons ADD COLUMN user_id TEXT");
+  } catch {
+    // Column already exists, ignore error
+  }
 }
 
 // Person functions
@@ -195,6 +213,7 @@ export function createPerson(name: string): Person {
     trained_at: string;
     face_count: number;
     photo_count: number;
+    user_id: string | null;
   };
 
   return {
@@ -205,6 +224,7 @@ export function createPerson(name: string): Person {
     trainedAt: row.trained_at,
     faceCount: row.face_count,
     photoCount: row.photo_count,
+    userId: row.user_id,
   };
 }
 
@@ -219,6 +239,7 @@ export function getPerson(name: string): Person | null {
     trained_at: string;
     face_count: number;
     photo_count: number;
+    user_id: string | null;
   } | null;
 
   if (!row) return null;
@@ -231,6 +252,7 @@ export function getPerson(name: string): Person | null {
     trainedAt: row.trained_at,
     faceCount: row.face_count,
     photoCount: row.photo_count,
+    userId: row.user_id,
   };
 }
 
@@ -245,6 +267,7 @@ export function getPersonById(id: number): Person | null {
     trained_at: string;
     face_count: number;
     photo_count: number;
+    user_id: string | null;
   } | null;
 
   if (!row) return null;
@@ -257,6 +280,7 @@ export function getPersonById(id: number): Person | null {
     trainedAt: row.trained_at,
     faceCount: row.face_count,
     photoCount: row.photo_count,
+    userId: row.user_id,
   };
 }
 
@@ -271,6 +295,7 @@ export function getAllPersons(): Person[] {
     trained_at: string;
     face_count: number;
     photo_count: number;
+    user_id: string | null;
   }>;
 
   return rows.map((row) => ({
@@ -281,6 +306,7 @@ export function getAllPersons(): Person[] {
     trainedAt: row.trained_at,
     faceCount: row.face_count,
     photoCount: row.photo_count,
+    userId: row.user_id,
   }));
 }
 
@@ -294,6 +320,12 @@ export function updatePersonPhotoCount(personId: number, photoCount: number): vo
   const database = getDb();
   const stmt = database.query("UPDATE persons SET photo_count = $photoCount WHERE id = $id");
   stmt.run({ $photoCount: photoCount, $id: personId });
+}
+
+export function updatePersonUserId(personId: number, userId: string | null): void {
+  const database = getDb();
+  const stmt = database.query("UPDATE persons SET user_id = $userId WHERE id = $id");
+  stmt.run({ $userId: userId, $id: personId });
 }
 
 // Scan functions
@@ -710,6 +742,12 @@ export function getAccuracyStats(): AccuracyStats {
     pending: 0,
   }));
 
+  // Initialize search method stats
+  const methodStats = new Map<"faces" | "users", { approved: number; rejected: number; pending: number }>([
+    ["faces", { approved: 0, rejected: 0, pending: 0 }],
+    ["users", { approved: 0, rejected: 0, pending: 0 }],
+  ]);
+
   // Process each photo
   for (const row of rows) {
     const recognitions: Recognition[] = JSON.parse(row.recognitions);
@@ -742,6 +780,11 @@ export function getAccuracyStats(): AccuracyStats {
       const bucket = bucketStats.find(b => rec.confidence >= b.min && rec.confidence < b.max)
         || bucketStats[bucketStats.length - 1]; // 100% goes in last bucket
       bucket[status]++;
+
+      // Update search method stats (default to 'faces' for pre-existing recognitions)
+      const searchMethod = rec.searchMethod ?? "faces";
+      const ms = methodStats.get(searchMethod)!;
+      ms[status]++;
     }
   }
 
@@ -774,6 +817,20 @@ export function getAccuracyStats(): AccuracyStats {
     };
   }).reverse(); // Show highest confidence first
 
+  // Convert method stats to final format (only include methods with data)
+  const bySearchMethod: SearchMethodStats[] = Array.from(methodStats.entries())
+    .filter(([_, stats]) => stats.approved + stats.rejected + stats.pending > 0)
+    .map(([method, stats]) => {
+      const total = stats.approved + stats.rejected;
+      return {
+        method,
+        approvedCount: stats.approved,
+        rejectedCount: stats.rejected,
+        pendingCount: stats.pending,
+        approvalRate: total > 0 ? (stats.approved / total) * 100 : null,
+      };
+    });
+
   // Calculate overall stats
   const totalApproved = byPerson.reduce((sum, p) => sum + p.approvedCount, 0);
   const totalRejected = byPerson.reduce((sum, p) => sum + p.rejectedCount, 0);
@@ -782,6 +839,7 @@ export function getAccuracyStats(): AccuracyStats {
   return {
     byPerson,
     byConfidence,
+    bySearchMethod,
     overall: {
       totalDecisions,
       approvedCount: totalApproved,

@@ -45,6 +45,9 @@ export async function statusCommand(): Promise<void> {
       spinner.stop();
       console.log(`  ✓ Collection: ${info.collectionId}`);
       console.log(`  ✓ Total faces indexed: ${info.faceCount}`);
+      if (info.userCount > 0) {
+        console.log(`  ✓ Users (aggregated vectors): ${info.userCount}`);
+      }
       if (info.createdAt) {
         console.log(`  ✓ Created: ${info.createdAt.toLocaleString()}`);
       }
@@ -122,6 +125,7 @@ export async function statusCommand(): Promise<void> {
   // Show config summary
   console.log("\nSettings:");
   console.log(`  AWS Region: ${config.aws.region}`);
+  console.log(`  Search method: ${config.rekognition.searchMethod}`);
   console.log(`  Min confidence: ${config.rekognition.minConfidence}%`);
   console.log(`  Album prefix: "${config.albums.prefix}"`);
 

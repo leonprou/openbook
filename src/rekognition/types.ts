@@ -12,6 +12,13 @@ export interface FaceMatch {
   boundingBox: BoundingBox;
 }
 
+export interface UserMatch {
+  userId: string;
+  personName: string;
+  confidence: number;
+  boundingBox: BoundingBox;
+}
+
 export interface BoundingBox {
   width: number;
   height: number;
@@ -27,6 +34,7 @@ export interface DetectedFace {
 export interface CollectionInfo {
   collectionId: string;
   faceCount: number;
+  userCount: number;
   createdAt?: Date;
 }
 

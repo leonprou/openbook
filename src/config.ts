@@ -12,6 +12,7 @@ const configSchema = z.object({
     .object({
       collectionId: z.string().default("claude-book-faces"),
       minConfidence: z.number().min(0).max(100).default(80),
+      searchMethod: z.enum(["faces", "users"]).default("faces"),
       rateLimit: z
         .object({
           minTime: z.number().min(0).default(200),
@@ -30,6 +31,7 @@ const configSchema = z.object({
       searching: z
         .object({
           maxFaces: z.number().min(1).max(100).default(10),
+          maxUsers: z.number().min(1).max(100).default(10),
         })
         .default({}),
     })
@@ -133,6 +135,7 @@ aws:
 rekognition:
   collectionId: claude-book-faces
   minConfidence: 80
+  searchMethod: faces       # "faces" (individual vectors) or "users" (aggregated vectors)
   rateLimit:
     minTime: 200            # Minimum ms between requests
     maxConcurrent: 5        # Max concurrent API calls
@@ -142,6 +145,7 @@ rekognition:
     detectionAttributes: DEFAULT  # DEFAULT or ALL
   searching:
     maxFaces: 10            # Max faces to search per photo
+    maxUsers: 10            # Max users to search per photo (when searchMethod: users)
 
 imageProcessing:
   maxDimension: 4096        # Max pixel dimension before resizing

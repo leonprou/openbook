@@ -5,6 +5,7 @@ import {
   type AccuracyStats,
   type PersonAccuracyStats,
   type ConfidenceBucketStats,
+  type SearchMethodStats,
 } from "../db";
 
 export async function statsCommand(): Promise<void> {
@@ -37,6 +38,12 @@ export async function statsCommand(): Promise<void> {
   // Confidence correlation table
   console.log("");
   printConfidenceTable(stats.byConfidence);
+
+  // Search method comparison (only show if there's data for both or users method)
+  if (stats.bySearchMethod.length > 0) {
+    console.log("");
+    printSearchMethodTable(stats.bySearchMethod);
+  }
 
   // Summary
   console.log("\nSummary:");
@@ -116,6 +123,31 @@ function printConfidenceTable(buckets: ConfidenceBucketStats[]): void {
       b.rejectedCount.toString(),
       b.pendingCount.toString(),
       formatRate(b.approvedCount, b.rejectedCount),
+    ];
+    console.log(row.map((v, i) => v.padEnd(widths[i])).join(" "));
+  }
+}
+
+function printSearchMethodTable(methods: SearchMethodStats[]): void {
+  console.log("Search Method Comparison:");
+
+  const headers = ["Method", "Approved", "Rejected", "Pending", "Approval %"];
+  const widths = [10, 10, 10, 9, 12];
+  const divider = widths.map(w => "─".repeat(w)).join("─");
+
+  console.log(divider);
+  console.log(
+    headers.map((h, i) => h.padEnd(widths[i])).join(" ")
+  );
+  console.log(divider);
+
+  for (const m of methods) {
+    const row = [
+      m.method,
+      m.approvedCount.toString(),
+      m.rejectedCount.toString(),
+      m.pendingCount.toString(),
+      formatRate(m.approvedCount, m.rejectedCount),
     ];
     console.log(row.map((v, i) => v.padEnd(widths[i])).join(" "));
   }

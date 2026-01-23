@@ -5,7 +5,7 @@ import { basename } from "path";
 import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { scanReferencesDirectory } from "../sources/local";
-import { initDatabase, createPerson, updatePersonFaceCount, getPerson, getAllPersons } from "../db";
+import { initDatabase, createPerson, updatePersonFaceCount, updatePersonUserId, getPerson, getAllPersons } from "../db";
 
 interface TrainOptions {
   references?: string;
@@ -74,12 +74,16 @@ export async function trainCommand(
 
   progressBar.start(totalPhotos, 0, { person: "" });
 
-  const results: { person: string; personId: number; indexed: number; errors: string[] }[] = [];
+  const useUserVectors = config.rekognition.searchMethod === "users";
+  const results: { person: string; personId: number; indexed: number; userId?: string; errors: string[] }[] = [];
 
   for (const [personName, photos] of people) {
     // Create person record in database
     const person = createPerson(personName);
-    const personResult = { person: personName, personId: person.id, indexed: 0, errors: [] as string[] };
+    const personResult = { person: personName, personId: person.id, indexed: 0, userId: undefined as string | undefined, errors: [] as string[] };
+
+    // Collect face IDs for user association
+    const faceIds: string[] = [];
 
     for (const photoPath of photos) {
       progressBar.increment({ person: personName });
@@ -88,6 +92,7 @@ export async function trainCommand(
         const face = await client.indexFace(photoPath, personName);
         if (face) {
           personResult.indexed++;
+          faceIds.push(face.faceId);
         } else {
           personResult.errors.push(`No face detected: ${photoPath}`);
         }
@@ -98,6 +103,23 @@ export async function trainCommand(
 
     // Update face count in database
     updatePersonFaceCount(person.id, personResult.indexed);
+
+    // Create user and associate faces if using user vectors
+    if (useUserVectors && faceIds.length > 0) {
+      try {
+        const userId = await client.createUser(personName);
+        const { associated, failed } = await client.associateFaces(userId, faceIds);
+        personResult.userId = userId;
+        updatePersonUserId(person.id, userId);
+
+        if (failed > 0) {
+          personResult.errors.push(`${failed} face(s) failed to associate with user`);
+        }
+      } catch (error: any) {
+        personResult.errors.push(`User creation failed: ${error.message}`);
+      }
+    }
+
     results.push(personResult);
   }
 
@@ -108,14 +130,24 @@ export async function trainCommand(
   console.log("Results:");
   for (const result of results) {
     const status = result.indexed > 0 ? "✓" : "✗";
-    console.log(`  ${status} ${result.person}: ${result.indexed} faces indexed`);
+    const userInfo = result.userId ? ` (user: ${result.userId})` : "";
+    console.log(`  ${status} ${result.person}: ${result.indexed} faces indexed${userInfo}`);
     for (const error of result.errors) {
       console.log(`    ⚠ ${error}`);
     }
   }
 
   const totalIndexed = results.reduce((sum, r) => sum + r.indexed, 0);
+  const usersCreated = results.filter(r => r.userId).length;
+
   console.log(`\nTotal: ${totalIndexed} faces indexed for ${people.size} people`);
+  if (useUserVectors) {
+    console.log(`Users created: ${usersCreated}`);
+    console.log("\nSearch method: users (aggregated vectors)");
+  } else {
+    console.log("\nSearch method: faces (individual vectors)");
+    console.log("Tip: Set 'searchMethod: users' in config.yaml for better accuracy with 5+ reference photos.");
+  }
 }
 
 interface TrainShowOptions {

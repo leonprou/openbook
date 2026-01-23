@@ -137,7 +137,11 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     spinner.fail("No faces indexed. Run 'claude-book train' first.");
     process.exit(1);
   }
-  spinner.succeed(`Collection has ${collectionInfo.faceCount} indexed faces`);
+
+  // Show collection info with search method
+  const searchMethod = config.rekognition.searchMethod;
+  const userInfo = collectionInfo.userCount > 0 ? `, ${collectionInfo.userCount} users` : "";
+  spinner.succeed(`Collection: ${collectionInfo.faceCount} faces${userInfo} [searchMethod: ${searchMethod}]`);
 
   // Build source options (limit is handled by scanner for new scans only)
   const sourceOptions = {
@@ -239,7 +243,21 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   progressBar.start(progressTotal, 0, { matched: 0, cached: 0, file: "" });
 
-  const scanner = new PhotoScanner(client, config.rekognition.minConfidence);
+  const scanner = new PhotoScanner(
+    client,
+    config.rekognition.minConfidence,
+    config.rekognition.searchMethod
+  );
+
+  // Validate that training matches the configured search method
+  try {
+    scanner.validateSearchMode();
+  } catch (error: any) {
+    progressBar.stop();
+    console.error(`\nError: ${error.message}`);
+    process.exit(1);
+  }
+
   const freshSource = new LocalPhotoSource(paths, config.sources.local.extensions, sourceOptions);
 
   // Verbose output helper

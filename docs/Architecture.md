@@ -86,6 +86,7 @@ id INTEGER PRIMARY KEY
 name TEXT UNIQUE NOT NULL      -- folder name from references/
 face_count INTEGER             -- indexed faces in AWS
 photo_count INTEGER            -- matched photos count
+user_id TEXT                   -- AWS Rekognition User ID (for searchMethod: users)
 ```
 
 **photos** - Scanned photos (keyed by content hash)
@@ -117,7 +118,8 @@ matches_found INTEGER
   "personName": "Mom",
   "confidence": 94.5,
   "faceId": "abc-123",
-  "boundingBox": {"left": 0.1, "top": 0.2, "width": 0.3, "height": 0.4}
+  "boundingBox": {"left": 0.1, "top": 0.2, "width": 0.3, "height": 0.4},
+  "searchMethod": "faces"       // "faces" (individual vectors) or "users" (aggregated)
 }
 ```
 
@@ -318,6 +320,40 @@ Uses Bottleneck library to limit API calls:
 - **Rate**: 5 requests/second
 - **Concurrent**: 1 request at a time
 
+### Search Methods
+
+Claude Book supports two face matching methods via `searchMethod` config:
+
+| Method | API | Description | Best For |
+|--------|-----|-------------|----------|
+| `faces` (default) | `SearchFacesByImage` | Compare against individual face vectors | Few reference photos (1-3) per person |
+| `users` | `SearchUsersByImage` | Compare against aggregated user vectors | Many reference photos (5+) per person |
+
+**Individual Face Vectors (`faces`)**
+```
+Reference photos    →    Individual face vectors
+├── Mom/photo1.jpg  →    FaceVector_A (best match: 87%)
+├── Mom/photo2.jpg  →    FaceVector_B (best match: 92%) ← returned
+└── Mom/photo3.jpg  →    FaceVector_C (best match: 78%)
+```
+Each reference photo creates a separate vector. Matches compare against each individually.
+
+**Aggregated User Vectors (`users`)**
+```
+Reference photos    →    Aggregated user vector
+├── Mom/photo1.jpg  ─┐
+├── Mom/photo2.jpg  ─┼→  UserVector_Mom (match: 94%)
+└── Mom/photo3.jpg  ─┘
+```
+All reference faces are aggregated into a single user representation. Better for:
+- Handling variation (glasses, lighting, angles)
+- Reducing false positives (strangers that match one specific photo)
+
+**Switching Methods**
+1. Change `searchMethod` in config.yaml
+2. Run `train cleanup --yes` to remove old collection
+3. Run `train` to re-index with the new method
+
 ### Image Preparation
 
 Before sending to AWS:
@@ -330,7 +366,10 @@ Before sending to AWS:
 | Operation | API | When |
 |-----------|-----|------|
 | Training | `IndexFaces` | `train` command |
-| Scanning | `SearchFacesByImage` | `scan` command |
+| User creation | `CreateUser` | `train` (when `searchMethod: users`) |
+| User association | `AssociateFaces` | `train` (when `searchMethod: users`) |
+| Scanning (faces) | `SearchFacesByImage` | `scan` (when `searchMethod: faces`) |
+| Scanning (users) | `SearchUsersByImage` | `scan` (when `searchMethod: users`) |
 | Status | `DescribeCollection` | `status` command |
 | Cleanup | `DeleteCollection` | `cleanup` command |
 
@@ -345,6 +384,7 @@ aws:
 rekognition:
   collectionId: claude-book-faces
   minConfidence: 80              # Match threshold (0-100)
+  searchMethod: faces            # "faces" (individual) or "users" (aggregated)
   rateLimit:
     minTime: 200                 # Minimum ms between API requests
     maxConcurrent: 5             # Max concurrent API calls
@@ -354,6 +394,7 @@ rekognition:
     detectionAttributes: DEFAULT # DEFAULT or ALL
   searching:
     maxFaces: 10                 # Max faces to search per photo
+    maxUsers: 10                 # Max users to search per photo (when searchMethod: users)
 
 imageProcessing:
   maxDimension: 4096             # Max pixel dimension before resizing

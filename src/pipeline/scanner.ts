@@ -1,6 +1,7 @@
 import { FaceRecognitionClient } from "../rekognition/client";
-import type { FaceMatch, ScanResult } from "../rekognition/types";
+import type { FaceMatch, UserMatch, ScanResult } from "../rekognition/types";
 import type { PhotoInfo } from "../sources/types";
+import type { Config } from "../config";
 import { createLogger } from "../logger";
 import {
   getPhotoByHash,
@@ -8,6 +9,7 @@ import {
   saveRecognitionHistory,
   getPerson,
   createPerson,
+  getAllPersons,
   type Recognition,
 } from "../db";
 import { getFileInfo } from "../utils/hash";
@@ -64,10 +66,41 @@ interface ProcessedPhotoResult {
 export class PhotoScanner {
   private client: FaceRecognitionClient;
   private minConfidence: number;
+  private searchMethod: "faces" | "users";
 
-  constructor(client: FaceRecognitionClient, minConfidence: number) {
+  constructor(client: FaceRecognitionClient, minConfidence: number, searchMethod: "faces" | "users" = "faces") {
     this.client = client;
     this.minConfidence = minConfidence;
+    this.searchMethod = searchMethod;
+  }
+
+  /**
+   * Validate that the training data matches the configured search method.
+   * Throws an error if searchMethod is 'users' but persons lack user vectors.
+   * Logs an info message if users exist but searchMethod is 'faces'.
+   */
+  validateSearchMode(): void {
+    const persons = getAllPersons();
+
+    if (this.searchMethod === "users") {
+      const missingUsers = persons.filter(p => !p.userId);
+      if (missingUsers.length > 0) {
+        const names = missingUsers.map(p => p.name).join(", ");
+        throw new Error(
+          `searchMethod is 'users' but ${missingUsers.length} person(s) lack user vectors: ${names}. ` +
+          `Run 'train cleanup --yes && train' to create user vectors.`
+        );
+      }
+    } else {
+      // Using 'faces' mode - check if users exist as info
+      const withUsers = persons.filter(p => p.userId);
+      if (withUsers.length > 0) {
+        log.info(
+          `${withUsers.length} person(s) have user vectors available. ` +
+          `Consider 'searchMethod: users' in config.yaml for potentially better accuracy.`
+        );
+      }
+    }
   }
 
   /**
@@ -125,12 +158,8 @@ export class PhotoScanner {
           cached++;
           log.debug({ photo: photo.path, hash: photoHash }, "Using cached result");
         } else {
-          // Call AWS Rekognition
-          const matches = await this.client.searchFaces(photo.path);
-          log.debug({ photo: photo.path, matchCount: matches.length }, "Search completed");
-
-          // Convert matches to recognitions with person IDs
-          recognitions = await this.convertMatchesToRecognitions(matches);
+          // Call AWS Rekognition using configured search method
+          recognitions = await this.searchAndConvert(photo.path);
 
           // Save to database
           savePhoto(photoHash, photo.path, fileInfo.size, scanId, recognitions);
@@ -258,10 +287,7 @@ export class PhotoScanner {
       // Track in-flight and call AWS
       incrementInFlight();
       try {
-        const matches = await this.client.searchFaces(photo.path);
-        log.debug({ photo: photo.path, matchCount: matches.length }, "Search completed");
-
-        const recognitions = await this.convertMatchesToRecognitions(matches);
+        const recognitions = await this.searchAndConvert(photo.path);
 
         return {
           photo,
@@ -277,10 +303,7 @@ export class PhotoScanner {
     }
 
     // No limit - call AWS directly
-    const matches = await this.client.searchFaces(photo.path);
-    log.debug({ photo: photo.path, matchCount: matches.length }, "Search completed");
-
-    const recognitions = await this.convertMatchesToRecognitions(matches);
+    const recognitions = await this.searchAndConvert(photo.path);
 
     return {
       photo,
@@ -290,6 +313,21 @@ export class PhotoScanner {
       recognitions,
       cachedCorrections: [],
     };
+  }
+
+  /**
+   * Search faces or users based on configured search method and convert to recognitions.
+   */
+  private async searchAndConvert(imagePath: string): Promise<Recognition[]> {
+    if (this.searchMethod === "users") {
+      const matches = await this.client.searchUsers(imagePath);
+      log.debug({ imagePath, matchCount: matches.length, method: "users" }, "Search completed");
+      return this.convertUserMatchesToRecognitions(matches);
+    } else {
+      const matches = await this.client.searchFaces(imagePath);
+      log.debug({ imagePath, matchCount: matches.length, method: "faces" }, "Search completed");
+      return this.convertMatchesToRecognitions(matches);
+    }
   }
 
   /**
@@ -574,6 +612,36 @@ export class PhotoScanner {
         confidence: match.confidence,
         faceId: match.faceId,
         boundingBox: match.boundingBox,
+        searchMethod: "faces",
+      });
+    }
+
+    return recognitions;
+  }
+
+  /**
+   * Convert AWS UserMatch objects to Recognition objects with person IDs.
+   * Auto-creates person records if they don't exist in the database.
+   */
+  private async convertUserMatchesToRecognitions(matches: UserMatch[]): Promise<Recognition[]> {
+    const recognitions: Recognition[] = [];
+
+    for (const match of matches) {
+      // Look up person ID from database, or create if not exists
+      let person = getPerson(match.personName);
+      if (!person) {
+        // Auto-create person record for people found in AWS Rekognition
+        person = createPerson(match.personName);
+        log.debug({ personName: match.personName, personId: person.id }, "Auto-created person record");
+      }
+
+      recognitions.push({
+        personId: person.id,
+        personName: match.personName,
+        confidence: match.confidence,
+        faceId: "", // User matches don't have individual face IDs
+        boundingBox: match.boundingBox,
+        searchMethod: "users",
       });
     }
 

@@ -5,7 +5,12 @@ import {
   DescribeCollectionCommand,
   IndexFacesCommand,
   SearchFacesByImageCommand,
+  SearchUsersByImageCommand,
   ListFacesCommand,
+  ListUsersCommand,
+  CreateUserCommand,
+  DeleteUserCommand,
+  AssociateFacesCommand,
 } from "@aws-sdk/client-rekognition";
 import Bottleneck from "bottleneck";
 import sharp from "sharp";
@@ -13,6 +18,7 @@ import { readFileSync } from "fs";
 import type {
   IndexedFace,
   FaceMatch,
+  UserMatch,
   CollectionInfo,
   BoundingBox,
 } from "./types";
@@ -83,6 +89,7 @@ export class FaceRecognitionClient {
       return {
         collectionId: this.collectionId,
         faceCount: response.FaceCount ?? 0,
+        userCount: response.UserCount ?? 0,
         createdAt: response.CreationTimestamp,
       };
     } catch (error: any) {
@@ -211,6 +218,183 @@ export class FaceRecognitionClient {
     } while (nextToken);
 
     return personCounts;
+  }
+
+  /**
+   * Create a user in the collection for aggregated face matching.
+   * User ID format: user_{personname} (lowercase, spaces to underscores)
+   */
+  async createUser(personName: string): Promise<string> {
+    const userId = `user_${personName.toLowerCase().replace(/\s+/g, "_")}`;
+
+    try {
+      await this.client.send(
+        new CreateUserCommand({
+          CollectionId: this.collectionId,
+          UserId: userId,
+        })
+      );
+      log.debug({ personName, userId }, "User created");
+      return userId;
+    } catch (error: any) {
+      if (error.name === "ResourceInUseException") {
+        // User already exists, return the existing ID
+        log.debug({ personName, userId }, "User already exists");
+        return userId;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Associate face IDs with a user for aggregated vector matching.
+   * @param userId - The user ID to associate faces with
+   * @param faceIds - Array of face IDs from IndexFaces
+   * @returns Object with counts of successfully and unsuccessfully associated faces
+   */
+  async associateFaces(
+    userId: string,
+    faceIds: string[]
+  ): Promise<{ associated: number; failed: number }> {
+    if (faceIds.length === 0) {
+      return { associated: 0, failed: 0 };
+    }
+
+    // AWS allows max 100 faces per association call
+    const maxFacesPerCall = 100;
+    let totalAssociated = 0;
+    let totalFailed = 0;
+
+    for (let i = 0; i < faceIds.length; i += maxFacesPerCall) {
+      const batch = faceIds.slice(i, i + maxFacesPerCall);
+
+      const response = await this.client.send(
+        new AssociateFacesCommand({
+          CollectionId: this.collectionId,
+          UserId: userId,
+          FaceIds: batch,
+        })
+      );
+
+      totalAssociated += response.AssociatedFaces?.length ?? 0;
+      totalFailed += response.UnsuccessfulFaceAssociations?.length ?? 0;
+    }
+
+    log.debug(
+      { userId, requested: faceIds.length, associated: totalAssociated, failed: totalFailed },
+      "Faces associated with user"
+    );
+
+    return { associated: totalAssociated, failed: totalFailed };
+  }
+
+  /**
+   * Search for users matching faces in an image using aggregated user vectors.
+   */
+  async searchUsers(imagePath: string): Promise<UserMatch[]> {
+    return this.limiter.schedule(async () => {
+      log.debug({ imagePath }, "Searching users");
+      const imageBytes = await this.prepareImage(imagePath);
+
+      try {
+        const response = await this.client.send(
+          new SearchUsersByImageCommand({
+            CollectionId: this.collectionId,
+            Image: { Bytes: imageBytes },
+            MaxUsers: this.config.rekognition.searching.maxUsers,
+            UserMatchThreshold: this.minConfidence,
+          })
+        );
+
+        const matches: UserMatch[] = [];
+
+        for (const userMatch of response.UserMatches ?? []) {
+          if (userMatch.User && userMatch.Similarity) {
+            // Extract person name from user ID (user_personname -> personname)
+            const userId = userMatch.User.UserId ?? "";
+            const personName = userId.startsWith("user_")
+              ? userId.slice(5).replace(/_/g, " ")
+              : userId;
+
+            matches.push({
+              userId,
+              personName,
+              confidence: userMatch.Similarity,
+              boundingBox: this.convertBoundingBox(
+                response.SearchedFace?.FaceDetail?.BoundingBox
+              ),
+            });
+          }
+        }
+
+        log.debug(
+          { imagePath, matchCount: matches.length, matches: matches.map(m => ({ person: m.personName, confidence: m.confidence.toFixed(2) })) },
+          "User search completed"
+        );
+
+        return matches;
+      } catch (error: any) {
+        if (error.name === "InvalidParameterException") {
+          log.debug({ imagePath }, "No face detected in image");
+          return [];
+        }
+        log.error({ imagePath, error: error.message }, "User search failed");
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * List all users in the collection.
+   * @returns Map of userId -> personName
+   */
+  async listUsers(): Promise<Map<string, string>> {
+    const users = new Map<string, string>();
+    let nextToken: string | undefined;
+
+    do {
+      const response = await this.client.send(
+        new ListUsersCommand({
+          CollectionId: this.collectionId,
+          MaxResults: 100,
+          NextToken: nextToken,
+        })
+      );
+
+      for (const user of response.Users ?? []) {
+        const userId = user.UserId ?? "";
+        // Extract person name from user ID
+        const personName = userId.startsWith("user_")
+          ? userId.slice(5).replace(/_/g, " ")
+          : userId;
+        users.set(userId, personName);
+      }
+
+      nextToken = response.NextToken;
+    } while (nextToken);
+
+    return users;
+  }
+
+  /**
+   * Delete a user from the collection.
+   */
+  async deleteUser(userId: string): Promise<void> {
+    try {
+      await this.client.send(
+        new DeleteUserCommand({
+          CollectionId: this.collectionId,
+          UserId: userId,
+        })
+      );
+      log.debug({ userId }, "User deleted");
+    } catch (error: any) {
+      if (error.name === "ResourceNotFoundException") {
+        // User doesn't exist, that's fine
+        return;
+      }
+      throw error;
+    }
   }
 
   private async prepareImage(imagePath: string): Promise<Uint8Array> {
