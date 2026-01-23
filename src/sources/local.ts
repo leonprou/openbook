@@ -51,6 +51,13 @@ function extractSortKey(filename: string): string {
   return "2" + filename.toLowerCase();
 }
 
+export interface DirectoryChecker {
+  /** Returns cached file count if directory should be skipped, or null to scan it */
+  shouldSkip(dirPath: string, mtimeMs: number): number | null;
+  /** Called after scanning a directory with the file count found */
+  onScanned(dirPath: string, mtimeMs: number, fileCount: number): void;
+}
+
 export interface LocalPhotoSourceOptions {
   limit?: number;
   filter?: RegExp;
@@ -58,6 +65,7 @@ export interface LocalPhotoSourceOptions {
   after?: Date;   // Only include photos after this date
   before?: Date;  // Only include photos before this date
   maxSortBuffer?: number;  // Max files to sort in memory per directory
+  directoryChecker?: DirectoryChecker;
 }
 
 export class LocalPhotoSource implements PhotoSource {
@@ -70,6 +78,10 @@ export class LocalPhotoSource implements PhotoSource {
   private after?: Date;
   private before?: Date;
   private maxSortBuffer: number;
+  private directoryChecker?: DirectoryChecker;
+  public skippedDirs = 0;
+  public skippedFiles = 0;
+  public walkedDirs = 0;
 
   constructor(paths: string[], extensions: string[], options?: LocalPhotoSourceOptions) {
     this.paths = paths;
@@ -80,6 +92,7 @@ export class LocalPhotoSource implements PhotoSource {
     this.after = options?.after;
     this.before = options?.before;
     this.maxSortBuffer = options?.maxSortBuffer ?? DEFAULT_MAX_SORT_BUFFER;
+    this.directoryChecker = options?.directoryChecker;
   }
 
   async *scan(): AsyncGenerator<PhotoInfo> {
@@ -105,6 +118,23 @@ export class LocalPhotoSource implements PhotoSource {
   }
 
   private *scanDirectory(dirPath: string): Generator<PhotoInfo> {
+    // Check directory mtime cache to skip file processing
+    let skipFiles = false;
+    if (this.directoryChecker) {
+      let dirStat;
+      try { dirStat = statSync(dirPath); } catch { return; }
+      const cached = this.directoryChecker.shouldSkip(dirPath, dirStat.mtimeMs);
+      if (cached !== null) {
+        skipFiles = true;
+        this.skippedDirs++;
+        this.skippedFiles += cached;
+      } else {
+        this.walkedDirs++;
+      }
+    } else {
+      this.walkedDirs++;
+    }
+
     let entries;
     try {
       entries = readdirSync(dirPath, { withFileTypes: true });
@@ -127,7 +157,7 @@ export class LocalPhotoSource implements PhotoSource {
 
       if (entry.isDirectory()) {
         subdirs.push(fullPath);
-      } else if (entry.isFile()) {
+      } else if (!skipFiles && entry.isFile()) {
         const ext = extname(entry.name).toLowerCase();
         if (this.extensions.has(ext)) {
           // Apply filter (match against filename only)
@@ -173,6 +203,15 @@ export class LocalPhotoSource implements PhotoSource {
       }
     }
 
+    // Record directory BEFORE yielding (cache is populated even if generator abandoned)
+    if (this.directoryChecker && !skipFiles) {
+      let dirStat;
+      try { dirStat = statSync(dirPath); } catch { /* ignore */ }
+      if (dirStat) {
+        this.directoryChecker.onScanned(dirPath, dirStat.mtimeMs, files.length);
+      }
+    }
+
     // Sort and yield files (with safety limit for large directories)
     if (files.length > this.maxSortBuffer) {
       logger.warn(
@@ -182,7 +221,7 @@ export class LocalPhotoSource implements PhotoSource {
       for (const photo of files) {
         yield photo;
       }
-    } else {
+    } else if (files.length > 0) {
       files.sort((a, b) =>
         extractSortKey(a.filename).localeCompare(extractSortKey(b.filename))
       );

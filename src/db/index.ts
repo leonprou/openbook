@@ -557,6 +557,14 @@ export function clearDirectoryCaches(): number {
   return count;
 }
 
+export function getDirectoryCacheStats(): { directories: number; files: number } {
+  const database = getDb();
+  const row = database.query(
+    "SELECT COUNT(*) as dirs, COALESCE(SUM(file_count), 0) as files FROM directories"
+  ).get() as { dirs: number; files: number };
+  return { directories: row.dirs, files: row.files };
+}
+
 // Clear all photos (keeps training data in persons table)
 export function clearAllPhotos(): { photosCleared: number; scansCleared: number } {
   const database = getDb();
@@ -571,6 +579,7 @@ export function clearAllPhotos(): { photosCleared: number; scansCleared: number 
   database.exec("DELETE FROM recognition_history");
   database.exec("DELETE FROM scans");
   database.exec("DELETE FROM photos");
+  database.exec("DELETE FROM directories");
 
   // Reset photo counts on persons (but keep training data)
   database.exec("UPDATE persons SET photo_count = 0");

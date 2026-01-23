@@ -41,19 +41,24 @@ Always use `bun run start` (not `claude-book`) to invoke commands from this proj
 
 ### Scanning for New Photos
 
+The scan command uses **directory caching** — it tracks each directory's modification time and skips unchanged directories entirely (no file enumeration or hashing needed). Repeated scans are fast automatically.
+
 When the user asks to scan for new photos (e.g., "look for new Nina photos", "scan recent photos"):
 
-1. **Check last scan**: Run `bun run start scan list` to find the last scan date
-2. **Narrow the scan**: Use `--after <last_scan_date>` to only process photos added since the last scan
-3. **Person-specific**: Use `--person "Name"` to filter the post-scan report to that person
-4. **Safety limit**: For first-time or uncertain scans, add `--limit 500` as a safety net
+1. **Just run the scan**: Directory caching makes repeated scans fast — only new/changed directories are processed
+2. **Person-specific**: Use `--person "Name"` to filter the post-scan report to that person
+3. **Safety limit**: For first-time scans on large libraries, add `--limit 500` as a safety net
+4. **Force full rescan**: Use `--rescan` to bypass directory caching if needed
 
-Example efficient scan:
+Example scan:
 ```bash
-bun run start scan --after 2025-01-15 --person "Nina" --limit 500
+bun run start scan --person "Nina"
 ```
 
-Never run a full unfiltered scan unless the user explicitly asks for it.
+For first-time scans on large libraries:
+```bash
+bun run start scan --limit 500 --person "Nina"
+```
 
 ## Quick Reference
 

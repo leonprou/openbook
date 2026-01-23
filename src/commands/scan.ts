@@ -4,7 +4,7 @@ import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { confirm } from "../utils/confirm";
 import { printPhotoTable, type PhotoRow } from "../utils/table";
-import { LocalPhotoSource, extractDateFromFilename } from "../sources/local";
+import { LocalPhotoSource, extractDateFromFilename, type DirectoryChecker } from "../sources/local";
 import { PhotoScanner, type PhotoMatch, type VerboseInfo } from "../pipeline/scanner";
 import { photosListCommand } from "./photos";
 import { existsSync } from "fs";
@@ -22,6 +22,8 @@ import {
   getPhotosByScan,
   addCorrection,
   clearAllScans,
+  getDirectoryCache,
+  saveDirectoryCache,
   type Photo,
   type Scan,
 } from "../db";
@@ -150,20 +152,33 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   spinner.succeed(`Collection: ${collectionInfo.faceCount} faces${userInfo} [searchMethod: ${searchMethod}]`);
 
   // Build source options (limit is handled by scanner for new scans only)
+  // Directory checker skips unchanged directories (read-only for count phase)
+  const readOnlyChecker: DirectoryChecker | undefined = options.rescan ? undefined : {
+    shouldSkip(dirPath: string, mtimeMs: number) {
+      const cached = getDirectoryCache(dirPath);
+      return (cached && cached.mtimeMs === mtimeMs) ? cached.fileCount : null;
+    },
+    onScanned() { /* no-op during count */ },
+  };
+
   const sourceOptions = {
     filter: options.filter ? new RegExp(options.filter) : undefined,
     exclude: options.exclude,
     after: options.after,
     before: options.before,
     maxSortBuffer: config.scanning.maxSortBuffer,
+    directoryChecker: readOnlyChecker,
   };
 
   // Count photos
   spinner.start("Counting photos...");
   const source = new LocalPhotoSource(paths, config.sources.local.extensions, sourceOptions);
   const totalPhotos = await source.count();
+  const cachedDirFiles = source.skippedFiles;
+  const cachedDirCount = source.skippedDirs;
+  const newDirCount = source.walkedDirs;
 
-  if (totalPhotos === 0) {
+  if (totalPhotos === 0 && cachedDirFiles === 0) {
     spinner.fail("No photos found in the specified paths");
     if (options.filter) {
       console.error(`  Filter applied: ${options.filter}`);
@@ -172,6 +187,11 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       console.error(`  Exclude patterns: ${options.exclude.join(", ")}`);
     }
     process.exit(1);
+  }
+
+  if (totalPhotos === 0 && cachedDirFiles > 0) {
+    spinner.succeed(`All ${cachedDirFiles} photos in ${cachedDirCount} directories unchanged (use --rescan to force)`);
+    return;
   }
 
   // Dry run: show count and files table, then exit (no DB writes or AWS calls)
@@ -220,16 +240,24 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   const scanId = createScan(paths);
 
   let foundMessage = `[Scan #${scanId}] Found ${totalPhotos} photos`;
-  if (options.limit || options.filter || options.exclude?.length || options.after || options.before) {
-    const parts: string[] = [];
-    if (options.filter) parts.push(`filter: ${options.filter}`);
-    if (options.exclude?.length) parts.push(`exclude: ${options.exclude.join(", ")}`);
-    if (options.after) parts.push(`after: ${options.after.toISOString().split("T")[0]}`);
-    if (options.before) parts.push(`before: ${options.before.toISOString().split("T")[0]}`);
-    if (options.limit) parts.push(`limit: ${options.limit} new`);
-    foundMessage += ` (${parts.join(", ")})`;
-  }
+  const parts: string[] = [];
+  if (options.filter) parts.push(`filter: ${options.filter}`);
+  if (options.exclude?.length) parts.push(`exclude: ${options.exclude.join(", ")}`);
+  if (options.after) parts.push(`after: ${options.after.toISOString().split("T")[0]}`);
+  if (options.before) parts.push(`before: ${options.before.toISOString().split("T")[0]}`);
+  if (options.limit) parts.push(`limit: ${options.limit} new`);
+  if (parts.length > 0) foundMessage += ` (${parts.join(", ")})`;
   spinner.succeed(foundMessage);
+
+  // Show directory cache breakdown when there are cached directories
+  if (cachedDirCount > 0) {
+    const dirParts: string[] = [];
+    dirParts.push(`${cachedDirCount} dirs unchanged (${cachedDirFiles} photos)`);
+    if (newDirCount > 0) {
+      dirParts.push(`${newDirCount} new dirs (${totalPhotos} photos to scan)`);
+    }
+    console.log(`  ${dirParts.join(", ")}`);
+  }
 
   // Scan photos with caching
   // When limit is set, progress bar tracks new scans toward the limit
@@ -264,7 +292,20 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     process.exit(1);
   }
 
-  const freshSource = new LocalPhotoSource(paths, config.sources.local.extensions, sourceOptions);
+  // Create scan-phase source with a checker that persists directory mtimes
+  const scanChecker: DirectoryChecker | undefined = options.rescan ? undefined : {
+    shouldSkip(dirPath: string, mtimeMs: number) {
+      const cached = getDirectoryCache(dirPath);
+      return (cached && cached.mtimeMs === mtimeMs) ? cached.fileCount : null;
+    },
+    onScanned(dirPath: string, mtimeMs: number, fileCount: number) {
+      saveDirectoryCache(dirPath, mtimeMs, fileCount, scanId);
+    },
+  };
+  const freshSource = new LocalPhotoSource(paths, config.sources.local.extensions, {
+    ...sourceOptions,
+    directoryChecker: scanChecker,
+  });
 
   // Verbose output helper
   const verboseLog: VerboseInfo[] = [];

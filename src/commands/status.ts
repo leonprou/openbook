@@ -7,6 +7,7 @@ import {
   getStats,
   getAllPersons,
   getRecentScans,
+  getDirectoryCacheStats,
 } from "../db";
 
 export async function statusCommand(): Promise<void> {
@@ -117,6 +118,13 @@ export async function statusCommand(): Promise<void> {
           : 0;
         console.log(`    ${dateStr}: ${scan.photosProcessed} photos, ${scan.matchesFound} matches (${cacheHitRate}% cache)`);
       }
+    }
+
+    const dirCache = getDirectoryCacheStats();
+    if (dirCache.directories > 0) {
+      console.log(`\n  Directory cache:`);
+      console.log(`    Cached directories: ${dirCache.directories}`);
+      console.log(`    Cached files: ${dirCache.files.toLocaleString()}`);
     }
   } catch {
     console.log(`  ○ Database not initialized (run 'claude-book scan' first)`);
