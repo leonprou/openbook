@@ -39,6 +39,22 @@ When the user asks to find, show, or review photos (e.g. "show me photos of Mom"
 
 Always use `bun run start` (not `claude-book`) to invoke commands from this project directory.
 
+### Scanning for New Photos
+
+When the user asks to scan for new photos (e.g., "look for new Nina photos", "scan recent photos"):
+
+1. **Check last scan**: Run `bun run start scan list` to find the last scan date
+2. **Narrow the scan**: Use `--after <last_scan_date>` to only process photos added since the last scan
+3. **Person-specific**: Use `--person "Name"` to filter the post-scan report to that person
+4. **Safety limit**: For first-time or uncertain scans, add `--limit 500` as a safety net
+
+Example efficient scan:
+```bash
+bun run start scan --after 2025-01-15 --person "Nina" --limit 500
+```
+
+Never run a full unfiltered scan unless the user explicitly asks for it.
+
 ## Quick Reference
 
 ```bash
@@ -92,6 +108,7 @@ bun run start <command>
 | `claude-book scan --dry-run` | Preview without making changes |
 | `claude-book scan --rescan` | Force re-scan of cached photos |
 | `claude-book scan --exclude "thumb"` | Exclude files containing "thumb" in filename |
+| `claude-book scan --person "Nina"` | Show only Nina's matches in post-scan report |
 | `claude-book scan list` | List recent scans with stats |
 | `claude-book scan show <id>` | Show details for a specific scan |
 | `claude-book scan clear` | Clear all scans and reset recognitions |

@@ -275,6 +275,13 @@ claude-book scan [path] [options]
 |--------|-------------|
 | `--dry-run` | Preview matches without saving |
 | `--rescan` | Force re-scan of cached photos |
+| `--limit <n>` | Limit number of new photos to scan |
+| `--after <date>` | Only include photos after date (YYYY-MM-DD) |
+| `--before <date>` | Only include photos before date (YYYY-MM-DD) |
+| `--person <name>` | Filter post-scan report to specific person (implies `--report`) |
+| `--filter <regex>` | Filter files by regex pattern (matches filename) |
+| `--exclude <pattern>` | Exclude files containing pattern in filename |
+| `--report` | Show photos report after scan completes |
 | `--verbose` | Show detailed progress |
 
 **Examples:**

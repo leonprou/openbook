@@ -202,6 +202,17 @@ export function initDatabase(): void {
   }
   database.exec("CREATE INDEX IF NOT EXISTS idx_photos_photo_date ON photos(photo_date)");
 
+  // Directory cache for fast scan skipping
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS directories (
+      path TEXT PRIMARY KEY,
+      mtime_ms INTEGER NOT NULL,
+      file_count INTEGER NOT NULL,
+      last_scan_id INTEGER,
+      scanned_at TEXT NOT NULL
+    );
+  `);
+
   // Backfill photo_date for existing records
   const nullDateRows = database.query(
     "SELECT hash, path FROM photos WHERE photo_date IS NULL"
@@ -508,9 +519,42 @@ export function clearAllScans(): { scansCleared: number; photosReset: number } {
 
   database.exec("DELETE FROM recognition_history");
   database.exec("DELETE FROM scans");
+  database.exec("DELETE FROM directories");
   database.exec("UPDATE photos SET recognitions = NULL, corrections = NULL, last_scan_id = NULL");
 
   return { scansCleared: scansCount, photosReset: photosCount };
+}
+
+// Directory cache functions
+export function getDirectoryCache(dirPath: string): { mtimeMs: number; fileCount: number } | null {
+  const database = getDb();
+  const row = database.query("SELECT mtime_ms, file_count FROM directories WHERE path = $path")
+    .get({ $path: dirPath }) as { mtime_ms: number; file_count: number } | null;
+  if (!row) return null;
+  return { mtimeMs: row.mtime_ms, fileCount: row.file_count };
+}
+
+export function saveDirectoryCache(dirPath: string, mtimeMs: number, fileCount: number, scanId: number): void {
+  const database = getDb();
+  database.query(`
+    INSERT OR REPLACE INTO directories (path, mtime_ms, file_count, last_scan_id, scanned_at)
+    VALUES ($path, $mtimeMs, $fileCount, $scanId, $scannedAt)
+  `).run({
+    $path: dirPath,
+    $mtimeMs: mtimeMs,
+    $fileCount: fileCount,
+    $scanId: scanId,
+    $scannedAt: new Date().toISOString(),
+  });
+}
+
+export function clearDirectoryCaches(): number {
+  const database = getDb();
+  const count = (
+    database.query("SELECT COUNT(*) as count FROM directories").get() as { count: number }
+  ).count;
+  database.exec("DELETE FROM directories");
+  return count;
 }
 
 // Clear all photos (keeps training data in persons table)

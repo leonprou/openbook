@@ -79,6 +79,7 @@ const scan = program
   .option("-e, --exclude <pattern...>", "Exclude files containing pattern in filename")
   .option("--after <date>", "Only include photos after date (YYYY-MM-DD)", parseDate)
   .option("--before <date>", "Only include photos before date (YYYY-MM-DD)", parseDate)
+  .option("--person <name>", "Filter report to specific person (implies --report)")
   .option("-v, --verbose", "Show list of scanned files")
   .option("--report", "Show photos report after scan completes")
   .action((path, options) => scanCommand({ ...options, path: path || options.path }));

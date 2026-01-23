@@ -36,6 +36,7 @@ interface ScanOptions {
   exclude?: string[];
   after?: Date;
   before?: Date;
+  person?: string;
   verbose?: boolean;
   report?: boolean;
 }
@@ -100,6 +101,11 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
       console.warn("  claude-book scan <path>");
       console.warn("");
     }
+  }
+
+  // --person implies --report
+  if (options.person) {
+    options.report = true;
   }
 
   // Initialize database
@@ -332,7 +338,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     }
     if (options.report) {
       console.log("\n--- Scan Report ---");
-      await photosListCommand({ scan: scanId, status: "all", limit: config.display.photoLimit });
+      await photosListCommand({ scan: scanId, status: "all", person: options.person, limit: config.display.photoLimit });
     }
     return;
   }
@@ -385,7 +391,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   if (options.report) {
     console.log("\n--- Scan Report ---");
-    await photosListCommand({ scan: scanId, status: "all", limit: config.display.photoLimit });
+    await photosListCommand({ scan: scanId, status: "all", person: options.person, limit: config.display.photoLimit });
   }
 }
 
