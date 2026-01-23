@@ -934,6 +934,90 @@ export function updateAllPersonPhotoCounts(): void {
   }
 }
 
+// Person confidence stats (min/avg/max of recognition confidence)
+export interface PersonConfidenceStats {
+  min: number;
+  avg: number;
+  max: number;
+  count: number;
+}
+
+export function getPersonConfidenceStats(personName: string): PersonConfidenceStats | null {
+  const database = getDb();
+  const rows = database.query(
+    "SELECT recognitions FROM photos WHERE recognitions IS NOT NULL AND recognitions != '[]'"
+  ).all() as Array<{ recognitions: string }>;
+
+  let min = Infinity;
+  let max = -Infinity;
+  let sum = 0;
+  let count = 0;
+
+  for (const row of rows) {
+    const recognitions: Recognition[] = JSON.parse(row.recognitions);
+    for (const rec of recognitions) {
+      if (rec.personName === personName) {
+        if (rec.confidence < min) min = rec.confidence;
+        if (rec.confidence > max) max = rec.confidence;
+        sum += rec.confidence;
+        count++;
+      }
+    }
+  }
+
+  if (count === 0) return null;
+  return { min, avg: sum / count, max, count };
+}
+
+// Recent matches for a person (most recently scanned photos)
+export interface PersonRecentMatch {
+  path: string;
+  confidence: number;
+  scannedAt: string;
+  status: "pending" | "approved" | "rejected" | "manual";
+}
+
+export function getRecentMatchesForPerson(personName: string, limit: number = 5): PersonRecentMatch[] {
+  const database = getDb();
+  const rows = database.query(
+    "SELECT path, recognitions, corrections, last_scanned_at FROM photos WHERE recognitions IS NOT NULL AND recognitions != '[]' ORDER BY last_scanned_at DESC"
+  ).all() as Array<{
+    path: string;
+    recognitions: string;
+    corrections: string | null;
+    last_scanned_at: string;
+  }>;
+
+  const results: PersonRecentMatch[] = [];
+
+  for (const row of rows) {
+    if (results.length >= limit) break;
+
+    const recognitions: Recognition[] = JSON.parse(row.recognitions);
+    const corrections: Correction[] = row.corrections ? JSON.parse(row.corrections) : [];
+
+    const rec = recognitions.find(r => r.personName === personName);
+    if (!rec) continue;
+
+    const correction = corrections.find(c => c.personId === rec.personId);
+    let status: PersonRecentMatch["status"] = "pending";
+    if (correction) {
+      if (correction.type === "approved") status = "approved";
+      else if (correction.type === "false_positive") status = "rejected";
+      else if (correction.type === "false_negative") status = "manual";
+    }
+
+    results.push({
+      path: row.path,
+      confidence: rec.confidence,
+      scannedAt: row.last_scanned_at,
+      status,
+    });
+  }
+
+  return results;
+}
+
 export function closeDatabase(): void {
   if (db) {
     db.close();

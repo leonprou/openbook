@@ -18,6 +18,7 @@ import {
 } from "./commands/photos";
 import { statusCommand } from "./commands/status";
 import { statsCommand } from "./commands/stats";
+import { personsListCommand, personsShowCommand } from "./commands/persons";
 import { cleanupCommand } from "./commands/cleanup";
 import { clearCommand } from "./commands/clear";
 
@@ -174,6 +175,20 @@ program
   .command("stats")
   .description("Show classification accuracy metrics")
   .action(statsCommand);
+
+// Persons command
+const persons = program
+  .command("persons")
+  .description("List people and their recognition stats")
+  .option("--json", "Output as JSON")
+  .action(personsListCommand);
+
+persons
+  .command("show")
+  .description("Show detailed info for a person")
+  .argument("<name>", "Person name")
+  .option("--json", "Output as JSON")
+  .action(personsShowCommand);
 
 program
   .command("clear")

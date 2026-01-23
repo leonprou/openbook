@@ -7,6 +7,7 @@ A CLI tool for organizing family photos using face recognition with AWS Rekognit
 ```
 claude-book init                          Initialize project
 claude-book train <path>                  Train with reference photos
+claude-book persons                       List people and stats
 claude-book scan <path>                   Scan photos for faces
 claude-book photos                        List and manage recognized photos
 claude-book status                        Show stats
@@ -170,6 +171,88 @@ Are you sure you want to continue? [y/N] y
 To start fresh, run:
   claude-book init
   claude-book train -r ./references
+```
+
+---
+
+### persons
+
+List all trained people and their recognition stats.
+
+```
+claude-book persons [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+**Output columns:** Name, Faces (indexed), Photos (matched), Approval %, Trained date.
+
+**Example:**
+```bash
+$ claude-book persons
+
+People:
+──────────────────────────────────────────────────────────
+Name         Faces  Photos  Approval %  Trained
+──────────────────────────────────────────────────────────
+Ada          15     418     94.5%       2025-01-15
+Nina         6      0       -           2025-01-20
+──────────────────────────────────────────────────────────
+2 person(s) total.
+```
+
+---
+
+### persons show
+
+Show detailed info for a specific person.
+
+```
+claude-book persons show <name> [options]
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `name` | Person name (case-insensitive) |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+**Shows:**
+- Basic info (display name, trained date, face/photo counts)
+- Recognition status breakdown (approved/rejected/pending + approval rate)
+- Confidence stats (min/avg/max)
+- Recent matches (last 5 photos with confidence, status, date)
+
+**Example:**
+```bash
+$ claude-book persons show Ada
+
+Person: Ada
+
+  Trained:       1/15/2025, 10:23:45 AM
+  Face count:    15
+  Photo count:   418
+
+Recognition Status:
+  Approved:      350
+  Rejected:      12
+  Pending:       56
+  Approval rate: 96.7%
+
+Confidence:
+  Min: 72.3%   Avg: 91.5%   Max: 99.8%
+
+Recent Matches:
+  99.2%  approved   2025-01-20  ~/Pictures/Family/IMG_1234.jpg
+  95.1%  pending    2025-01-20  ~/Pictures/Family/IMG_1230.jpg
+  88.7%  approved   2025-01-19  ~/Pictures/Vacation/DSC_0042.jpg
 ```
 
 ---

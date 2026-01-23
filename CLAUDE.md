@@ -74,6 +74,15 @@ bun run start <command>
 | `claude-book train --person "Nina"` | Train only a specific person |
 | `claude-book train cleanup [--yes]` | Remove AWS Rekognition collection |
 
+### Persons Commands
+
+| Command | Description |
+|---------|-------------|
+| `claude-book persons` | List all persons with stats |
+| `claude-book persons --json` | Output as JSON |
+| `claude-book persons show <name>` | Show detailed info for a person |
+| `claude-book persons show <name> --json` | Output as JSON |
+
 ### Scan Commands
 
 | Command | Description |

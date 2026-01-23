@@ -14,7 +14,10 @@ import {
 } from "@aws-sdk/client-rekognition";
 import Bottleneck from "bottleneck";
 import sharp from "sharp";
-import { readFileSync } from "fs";
+import { readFileSync, unlinkSync } from "fs";
+import { execSync } from "child_process";
+import { tmpdir } from "os";
+import { join } from "path";
 import type {
   IndexedFace,
   FaceMatch,
@@ -409,38 +412,66 @@ export class FaceRecognitionClient {
   }
 
   private async prepareImage(imagePath: string): Promise<Uint8Array> {
-    const buffer = readFileSync(imagePath);
-
-    // Resize if too large (Rekognition has 5MB limit)
-    const metadata = await sharp(buffer).metadata();
+    const isHeic = imagePath.toLowerCase().endsWith(".heic");
     const { maxDimension, jpegQuality } = this.config.imageProcessing;
 
-    log.debug(
-      { imagePath, format: metadata.format, width: metadata.width, height: metadata.height, size: buffer.length },
-      "Preparing image"
-    );
+    let buffer: Buffer;
+    try {
+      buffer = readFileSync(imagePath);
+      const metadata = await sharp(buffer).metadata();
+
+      log.debug(
+        { imagePath, format: metadata.format, width: metadata.width, height: metadata.height, size: buffer.length },
+        "Preparing image"
+      );
+
+      if (
+        (metadata.width && metadata.width > maxDimension) ||
+        (metadata.height && metadata.height > maxDimension)
+      ) {
+        log.debug({ imagePath }, "Resizing large image");
+        return await sharp(buffer)
+          .resize(maxDimension, maxDimension, { fit: "inside" })
+          .jpeg({ quality: jpegQuality })
+          .toBuffer();
+      }
+
+      if (isHeic || metadata.format === "heif") {
+        log.debug({ imagePath }, "Converting HEIC to JPEG");
+        return await sharp(buffer).jpeg({ quality: jpegQuality }).toBuffer();
+      }
+
+      return buffer;
+    } catch (error) {
+      if (!isHeic) throw error;
+      log.debug({ imagePath, error }, "Sharp HEIC decode failed, falling back to sips");
+    }
+
+    // Fallback: use macOS sips to convert HEIC → JPEG
+    buffer = this.convertHeicWithSips(imagePath);
+    const metadata = await sharp(buffer).metadata();
 
     if (
       (metadata.width && metadata.width > maxDimension) ||
       (metadata.height && metadata.height > maxDimension)
     ) {
-      log.debug({ imagePath }, "Resizing large image");
       return await sharp(buffer)
         .resize(maxDimension, maxDimension, { fit: "inside" })
         .jpeg({ quality: jpegQuality })
         .toBuffer();
     }
 
-    // Convert HEIC to JPEG
-    if (
-      imagePath.toLowerCase().endsWith(".heic") ||
-      metadata.format === "heif"
-    ) {
-      log.debug({ imagePath }, "Converting HEIC to JPEG");
-      return await sharp(buffer).jpeg({ quality: jpegQuality }).toBuffer();
-    }
-
     return buffer;
+  }
+
+  private convertHeicWithSips(imagePath: string): Buffer {
+    const tempPath = join(tmpdir(), `claude-book-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+    try {
+      execSync(`sips -s format jpeg "${imagePath}" --out "${tempPath}"`, { stdio: "pipe" });
+      return readFileSync(tempPath);
+    } finally {
+      try { unlinkSync(tempPath); } catch {}
+    }
   }
 
   private convertBoundingBox(box?: {
