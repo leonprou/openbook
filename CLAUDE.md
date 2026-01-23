@@ -18,6 +18,25 @@ CLI tool for organizing family photos using face recognition with AWS Rekognitio
    - Architecture or data models → update `docs/Architecture.md`
    - User-facing features → update `README.md`
 
+### Finding and Presenting Photos
+
+When the user asks to find, show, or review photos (e.g. "show me photos of Mom", "find photos from the last scan", "what photos are pending?"), use the `claude-book` CLI:
+
+1. **Find photos**: Run `bun run start photos` with appropriate filters:
+   - `--person "Name"` to filter by person
+   - `--status pending|approved|rejected|manual|all` to filter by review status
+   - `--scan <id>` to filter by scan run
+   - `--min-confidence N` / `--max-confidence N` to filter by recognition confidence
+   - `--json` for structured output you can parse and summarize
+
+2. **Present results**: Summarize the output for the user — show counts, list file paths, and highlight key details (person, confidence, status). If the user wants to visually inspect photos, use `--open` to open them in Preview.
+
+3. **Take action**: If the user wants to approve, reject, or add recognitions based on what they see, use the corresponding subcommands (`photos approve`, `photos reject`, `photos add`).
+
+4. **Scan new photos**: If the user asks to scan a folder, run `bun run start scan <path>` and report the results.
+
+Always use `bun run start` (not `claude-book`) to invoke commands from this project directory.
+
 ## Quick Reference
 
 ```bash
