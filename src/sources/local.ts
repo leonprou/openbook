@@ -66,6 +66,7 @@ export interface LocalPhotoSourceOptions {
   before?: Date;  // Only include photos before this date
   maxSortBuffer?: number;  // Max files to sort in memory per directory
   directoryChecker?: DirectoryChecker;
+  explicitFiles?: string[];  // Specific files to scan (bypasses directory walking)
 }
 
 export class LocalPhotoSource implements PhotoSource {
@@ -79,6 +80,7 @@ export class LocalPhotoSource implements PhotoSource {
   private before?: Date;
   private maxSortBuffer: number;
   private directoryChecker?: DirectoryChecker;
+  private explicitFiles?: string[];
   public skippedDirs = 0;
   public skippedFiles = 0;
   public walkedDirs = 0;
@@ -93,13 +95,36 @@ export class LocalPhotoSource implements PhotoSource {
     this.before = options?.before;
     this.maxSortBuffer = options?.maxSortBuffer ?? DEFAULT_MAX_SORT_BUFFER;
     this.directoryChecker = options?.directoryChecker;
+    this.explicitFiles = options?.explicitFiles;
   }
 
   async *scan(): AsyncGenerator<PhotoInfo> {
     let yielded = 0;
+
+    if (this.explicitFiles) {
+      for (const filePath of this.explicitFiles) {
+        if (this.limit !== undefined && yielded >= this.limit) return;
+        const filename = basename(filePath);
+        const ext = extname(filename).toLowerCase();
+        if (!this.extensions.has(ext)) continue;
+        if (this.filter && !this.filter.test(filename)) continue;
+        if (this.exclude?.some((p) => filename.toLowerCase().includes(p))) continue;
+        let stat;
+        try { stat = statSync(filePath); } catch { continue; }
+        const modifiedAt = stat.mtime;
+        if (this.after || this.before) {
+          const photoDate = extractDateFromFilename(filename) ?? modifiedAt;
+          if (this.after && photoDate < this.after) continue;
+          if (this.before && photoDate > this.before) continue;
+        }
+        yielded++;
+        yield { path: filePath, filename, extension: ext, size: stat.size, modifiedAt };
+      }
+      return;
+    }
+
     for (const basePath of this.paths) {
       for (const photo of this.scanDirectory(basePath)) {
-        // Apply limit
         if (this.limit !== undefined && yielded >= this.limit) {
           return;
         }

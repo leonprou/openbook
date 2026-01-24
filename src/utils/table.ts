@@ -18,7 +18,7 @@ export interface ColumnWidths {
 const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
   personName: 12,
   folder: 16,
-  filename: 35,
+  filename: 45,
 };
 
 /**

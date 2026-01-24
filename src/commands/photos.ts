@@ -70,6 +70,7 @@ interface PhotoFilter {
   maxConfidence?: number;
   after?: string;   // ISO 8601 date string
   before?: string;  // ISO 8601 date string
+  file?: string;    // Filename substring filter
 }
 
 interface PhotoResult {
@@ -153,6 +154,10 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
     conditions.push("photo_date <= $before");
     params.$before = filter.before;
   }
+  if (filter.file) {
+    conditions.push("path LIKE '%' || $file || '%'");
+    params.$file = filter.file;
+  }
 
   let query = "SELECT * FROM photos";
   if (conditions.length > 0) {
@@ -205,8 +210,20 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
     const allRecognitions = [...recognitions, ...falseNegatives];
 
     // Handle photos with no recognitions
-    // Skip by default - only show when explicitly filtering for "(no match)"
     if (allRecognitions.length === 0) {
+      if (filter.scanId) {
+        results.push({
+          index: index++,
+          hash: row.hash,
+          path: row.path,
+          person: "(no match)",
+          confidence: 0,
+          status: "pending" as PhotoStatus,
+          scanId: row.last_scan_id,
+          scannedAt: row.last_scanned_at,
+          date: photoDate,
+        });
+      }
       continue;
     }
 
@@ -346,6 +363,7 @@ interface PhotosListOptions {
   maxConfidence?: number;
   after?: Date;
   before?: Date;
+  file?: string;
 }
 
 interface PhotosApproveOptions {
@@ -355,6 +373,7 @@ interface PhotosApproveOptions {
   minConfidence?: number;
   maxConfidence?: number;
   person?: string;
+  scan?: number | string;
 }
 
 interface PhotosRejectOptions {
@@ -432,6 +451,7 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
     maxConfidence: options.maxConfidence,
     after: options.after?.toISOString(),
     before: options.before?.toISOString(),
+    file: options.file,
   };
 
   const { results, total } = queryPhotos(filter);
@@ -514,12 +534,29 @@ export async function photosApproveCommand(
   let toApprove: PhotoResult[];
 
   // If filters specified, query fresh from database (not limited by cached results)
-  const hasFilters = options.person || options.minConfidence !== undefined || options.maxConfidence !== undefined;
+  const hasFilters = options.person || options.scan || options.minConfidence !== undefined || options.maxConfidence !== undefined;
 
   if (hasFilters) {
+    // Resolve scan ID
+    let scanId: number | undefined;
+    if (options.scan === "latest") {
+      const lastScan = getLastScan();
+      if (!lastScan) {
+        console.log("No scans found. Run 'claude-book scan' first.");
+        return;
+      }
+      scanId = lastScan.id;
+      console.log(`Using latest scan #${scanId}`);
+    } else if (typeof options.scan === "number") {
+      scanId = options.scan;
+    } else if (typeof options.scan === "string") {
+      scanId = parseInt(options.scan, 10);
+    }
+
     // Query fresh with filters - high limit to get all matching
     const filter: PhotoFilter = {
       person: options.person,
+      scanId,
       status: "pending",
       limit: 10000,
       minConfidence: options.minConfidence,

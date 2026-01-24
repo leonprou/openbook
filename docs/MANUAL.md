@@ -268,11 +268,12 @@ claude-book scan [path] [options]
 **Arguments:**
 | Argument | Description |
 |----------|-------------|
-| `path` | Path to photos (default: from config.yaml) |
+| `path` | Path to photos (required unless `--file` is used) |
 
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `--file <path...>` | Scan specific files by path (bypasses directory walking) |
 | `--dry-run` | Preview matches without saving |
 | `--rescan` | Force re-scan of cached photos |
 | `--limit <n>` | Limit number of new photos to scan |
@@ -286,12 +287,12 @@ claude-book scan [path] [options]
 
 **Examples:**
 ```bash
-# Scan from config paths
-$ claude-book scan
-
-# Scan specific folder
+# Scan a folder
 $ claude-book scan ~/Pictures/Family
 $ claude-book scan ~/Pictures/Vacation --dry-run
+
+# Scan specific files
+$ claude-book scan --file ~/Pictures/photo1.jpg ~/Pictures/photo2.heic
 
 # Force rescan (ignore cache)
 $ claude-book scan ~/Pictures --rescan
@@ -413,6 +414,7 @@ claude-book photos [options]
 | `--scan <id>` | Filter by scan ID |
 | `--after <date>` | Only include photos after date (YYYY-MM-DD) |
 | `--before <date>` | Only include photos before date (YYYY-MM-DD) |
+| `--file <name>` | Filter by filename (substring match) |
 | `--open` | Open photos in Preview app |
 | `--limit <n>` | Max results (default: 250) |
 | `--offset <n>` | Skip first n results |
@@ -507,6 +509,7 @@ claude-book photos approve <person> <path>
 |--------|-------------|
 | `--all` | Approve all photos in current list |
 | `--without <indexes>` | Exclude these indexes from `--all` |
+| `--scan <id>` | Filter by scan ID (use `latest` for most recent) |
 | `--dry-run` | Preview without making changes |
 
 **Index formats:** `1` | `1,2,4` | `1-5` | `1,3-5,8`

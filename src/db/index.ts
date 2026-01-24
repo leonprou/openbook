@@ -213,6 +213,9 @@ export function initDatabase(): void {
     );
   `);
 
+  // Clear incorrectly parsed dates (e.g. 1900-xx-xx from bad regex matches)
+  database.exec("UPDATE photos SET photo_date = NULL WHERE photo_date LIKE '1900-%'");
+
   // Backfill photo_date for existing records
   const nullDateRows = database.query(
     "SELECT hash, path FROM photos WHERE photo_date IS NULL"

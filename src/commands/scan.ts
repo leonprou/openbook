@@ -32,6 +32,7 @@ import {
 interface ScanOptions {
   source?: string;
   path?: string;
+  file?: string[];
   dryRun?: boolean;
   rescan?: boolean;
   limit?: number;
@@ -95,17 +96,6 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   const config = loadConfig();
   const spinner = ora();
 
-  // Deprecation warning for old syntax
-  if (options.path && !process.argv.includes(options.path)) {
-    // Only show if -p was used (not positional)
-    const hasPathFlag = process.argv.includes("-p") || process.argv.includes("--path");
-    if (hasPathFlag) {
-      console.warn("Warning: -p/--path is deprecated. Use positional argument instead:");
-      console.warn("  claude-book scan <path>");
-      console.warn("");
-    }
-  }
-
   // --person implies --report
   if (options.person) {
     options.report = true;
@@ -116,23 +106,28 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   initDatabase();
   spinner.succeed("Database initialized");
 
-  // Determine paths to scan
-  let paths: string[];
-  if (options.path) {
-    paths = [expandPath(options.path)];
-  } else {
-    paths = config.sources.local.paths;
-  }
-
-  if (paths.length === 0) {
-    spinner.fail("No paths to scan. Use --path or configure sources.local.paths in config.yaml");
+  // Validate that either path or --file is provided
+  if (!options.path && !options.file?.length) {
+    spinner.fail("Either a path argument or --file option is required");
     process.exit(1);
   }
 
-  // Validate paths exist
-  for (const p of paths) {
-    if (!existsSync(p)) {
-      spinner.fail(`Path not found: ${p}`);
+  // Determine files/paths to scan
+  let paths: string[] = [];
+  let explicitFiles: string[] | undefined;
+
+  if (options.file?.length) {
+    explicitFiles = options.file.map(expandPath);
+    for (const f of explicitFiles) {
+      if (!existsSync(f)) {
+        spinner.fail(`File not found: ${f}`);
+        process.exit(1);
+      }
+    }
+  } else {
+    paths = [expandPath(options.path!)];
+    if (!existsSync(paths[0])) {
+      spinner.fail(`Path not found: ${paths[0]}`);
       process.exit(1);
     }
   }
@@ -154,7 +149,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   // Build source options (limit is handled by scanner for new scans only)
   // Directory checker skips unchanged directories (read-only for count phase)
-  const readOnlyChecker: DirectoryChecker | undefined = options.rescan ? undefined : {
+  const readOnlyChecker: DirectoryChecker | undefined = (options.rescan || explicitFiles) ? undefined : {
     shouldSkip(dirPath: string, mtimeMs: number) {
       const cached = getDirectoryCache(dirPath);
       return (cached && cached.mtimeMs === mtimeMs) ? cached.fileCount : null;
@@ -169,6 +164,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     before: options.before,
     maxSortBuffer: config.scanning.maxSortBuffer,
     directoryChecker: readOnlyChecker,
+    explicitFiles,
   };
 
   // Count photos
@@ -307,7 +303,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   // Collect directory cache entries in memory; only persist on successful completion
   const pendingDirCache: Array<{ dirPath: string; mtimeMs: number; fileCount: number }> = [];
-  const scanChecker: DirectoryChecker | undefined = options.rescan ? undefined : {
+  const scanChecker: DirectoryChecker | undefined = (options.rescan || explicitFiles) ? undefined : {
     shouldSkip(dirPath: string, mtimeMs: number) {
       const cached = getDirectoryCache(dirPath);
       return (cached && cached.mtimeMs === mtimeMs) ? cached.fileCount : null;

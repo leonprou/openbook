@@ -70,7 +70,7 @@ const configSchema = z.object({
         .object({
           personName: z.number().min(5).max(50).default(12),
           folder: z.number().min(5).max(50).default(16),
-          filename: z.number().min(10).max(100).default(35),
+          filename: z.number().min(10).max(100).default(45),
         })
         .default({}),
     })
@@ -179,7 +179,7 @@ display:
   columns:
     personName: 12          # Person name column width
     folder: 16              # Folder column width
-    filename: 35            # Filename column width
+    filename: 45            # Filename column width
 
 scanning:
   concurrency: 10           # Parallel AWS requests (1-10)

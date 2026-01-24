@@ -45,19 +45,24 @@ The scan command uses **directory caching** — it tracks each directory's modif
 
 When the user asks to scan for new photos (e.g., "look for new Nina photos", "scan recent photos"):
 
-1. **Just run the scan**: Directory caching makes repeated scans fast — only new/changed directories are processed
-2. **Person-specific**: Use `--person "Name"` to filter the post-scan report to that person
-3. **Safety limit**: For first-time scans on large libraries, add `--limit 500` as a safety net
-4. **Force full rescan**: Use `--rescan` to bypass directory caching if needed
+1. **Path is required**: If the user doesn't specify a folder path, ask them which folder to scan. Suggest relevant options:
+   - Subfolders within common locations (list them with `ls`)
+   - Any paths from previous scans (check with `bun run start scan list`)
+   - **Never scan root-level folders** like `~/Pictures`, `~/Downloads`, or `~/Desktop` directly — always ask the user to pick a specific subfolder
+   - **Never scan source folders** from `config.yaml` → `sources.local.paths` — these are aggregation folders that likely contain photos from many different sources and are too broad to scan directly. Always ask the user to pick a specific subfolder within them instead.
+2. **Just run the scan**: Directory caching makes repeated scans fast — only new/changed directories are processed
+3. **Person-specific**: Use `--person "Name"` to filter the post-scan report to that person
+4. **Safety limit**: For first-time scans on large libraries, add `--limit 500` as a safety net
+5. **Force full rescan**: Use `--rescan` to bypass directory caching if needed
 
 Example scan:
 ```bash
-bun run start scan --person "Nina"
+bun run start scan ~/Pictures/Family --person "Nina"
 ```
 
 For first-time scans on large libraries:
 ```bash
-bun run start scan --limit 500 --person "Nina"
+bun run start scan ~/Pictures/Family --limit 500 --person "Nina"
 ```
 
 ## Quick Reference
@@ -109,11 +114,11 @@ bun run start <command>
 | Command | Description |
 |---------|-------------|
 | `claude-book scan <path>` | Scan photos at path |
-| `claude-book scan` | Use paths from config.yaml |
-| `claude-book scan --dry-run` | Preview without making changes |
-| `claude-book scan --rescan` | Force re-scan of cached photos |
-| `claude-book scan --exclude "thumb"` | Exclude files containing "thumb" in filename |
-| `claude-book scan --person "Nina"` | Show only Nina's matches in post-scan report |
+| `claude-book scan --file <path...>` | Scan specific files by path |
+| `claude-book scan <path> --dry-run` | Preview without making changes |
+| `claude-book scan <path> --rescan` | Force re-scan of cached photos |
+| `claude-book scan <path> --exclude "thumb"` | Exclude files containing "thumb" in filename |
+| `claude-book scan <path> --person "Nina"` | Show only Nina's matches in post-scan report |
 | `claude-book scan list` | List recent scans with stats |
 | `claude-book scan show <id>` | Show details for a specific scan |
 | `claude-book scan clear` | Clear all scans and reset recognitions |
@@ -132,6 +137,7 @@ bun run start <command>
 | `claude-book photos --json` | Output as JSON |
 | `claude-book photos --min-confidence 80` | Filter by confidence >= 80% |
 | `claude-book photos --max-confidence 70` | Filter by confidence <= 70% |
+| `claude-book photos --file "name"` | Filter by filename (substring match) |
 | `claude-book photos --after 2025-01-01` | Filter photos taken after date |
 | `claude-book photos --before 2025-06-30` | Filter photos taken before date |
 | `claude-book photos --page 2` | Show page 2 of results |
@@ -140,6 +146,7 @@ bun run start <command>
 | `claude-book photos approve --all` | Approve all in current list |
 | `claude-book photos approve --all --without 3,5` | Approve all except indexes |
 | `claude-book photos approve --all --min-confidence 90` | Approve high-confidence matches |
+| `claude-book photos approve --all --scan 45` | Approve all pending from scan |
 | `claude-book photos approve --person "Mom" --min-confidence 95` | Approve high-confidence for person |
 | `claude-book photos approve <person> <path>` | Approve specific photo |
 | `claude-book photos reject <indexes>` | Reject by index |

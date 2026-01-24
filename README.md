@@ -29,13 +29,13 @@ claude-book init
 claude-book train -r ./references
 
 # 3. Scan your photo library
-claude-book scan -p ~/Pictures/Family
+claude-book scan ~/Pictures/Family
 
 # 4. Review and correct any mistakes
 claude-book reject --person "Mom" --photo ~/Pictures/wrong_match.jpg
 
 # 5. Re-scan uses cache, so it's fast!
-claude-book scan -p ~/Pictures/Family
+claude-book scan ~/Pictures/Family
 ```
 
 ## Commands
@@ -44,9 +44,9 @@ claude-book scan -p ~/Pictures/Family
 |---------|-------------|
 | `claude-book init` | Initialize config and AWS Rekognition collection |
 | `claude-book train -r <path>` | Index faces from reference folders |
-| `claude-book scan -p <path>` | Scan photos and create review albums |
-| `claude-book scan --dry-run` | Preview what albums would be created |
-| `claude-book scan --rescan` | Force re-scan of cached photos |
+| `claude-book scan <path>` | Scan photos and create review albums |
+| `claude-book scan <path> --dry-run` | Preview what albums would be created |
+| `claude-book scan <path> --rescan` | Force re-scan of cached photos |
 | `claude-book approve` | Approve review albums and create final albums |
 | `claude-book approve --person "Name" --photo <path>` | Approve a specific recognition |
 | `claude-book reject --person "Name" --photo <path>` | Mark recognition as incorrect |
@@ -68,7 +68,7 @@ Claude Book remembers every photo it scans using a local SQLite database (`.clau
 ### Scan Output Example
 
 ```
-$ claude-book scan -p ~/Photos
+$ claude-book scan ~/Photos
 
 Scanning |████████████████| 100% | 1234/1234 | Matched: 89 | Cached: 892
 
@@ -273,13 +273,13 @@ iCloud Photos syncs to a local folder on macOS. Point claude-book at the Photos 
 
 ```bash
 # Scan iCloud Photos library
-claude-book scan -p ~/Pictures/Photos\ Library.photoslibrary/originals
+claude-book scan ~/Pictures/Photos\ Library.photoslibrary/originals
 ```
 
 Or export photos first for better results:
 1. Select photos in Apple Photos
 2. File → Export → Export Unmodified Originals
-3. `claude-book scan -p ~/exported-photos`
+3. `claude-book scan ~/exported-photos`
 
 ## Telegram Integration
 
@@ -296,7 +296,7 @@ Family photos are often shared in Telegram groups:
 ### Step 2: Scan the Export
 
 ```bash
-claude-book scan -p ~/Downloads/TelegramExport/photos
+claude-book scan ~/Downloads/TelegramExport/photos
 ```
 
 ## Prerequisites

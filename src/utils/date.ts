@@ -16,16 +16,20 @@ export function extractDateFromFilename(filename: string): Date | null {
     );
   }
 
-  // Pattern 2: YYYYMMDD with optional HHMMSS
+  // Pattern 2: YYYYMMDD with optional HHMMSS (year must be 19xx or 20xx)
   const dateTimeMatch = filename.match(
-    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_]?(\d{2})?[-_]?(\d{2})?[-_]?(\d{2})?/
+    /((?:19|20)\d{2})[-_]?(\d{2})[-_]?(\d{2})[-_]?(\d{2})?[-_]?(\d{2})?[-_]?(\d{2})?/
   );
   if (dateTimeMatch) {
     const [, y, m, d, h = "0", min = "0", s = "0"] = dateTimeMatch;
-    return new Date(
-      parseInt(y), parseInt(m) - 1, parseInt(d),
-      parseInt(h), parseInt(min), parseInt(s)
-    );
+    const month = parseInt(m);
+    const day = parseInt(d);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return new Date(
+        parseInt(y), month - 1, day,
+        parseInt(h), parseInt(min), parseInt(s)
+      );
+    }
   }
 
   return null;

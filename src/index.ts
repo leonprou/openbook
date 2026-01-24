@@ -72,7 +72,7 @@ const scan = program
   .command("scan")
   .description("Scan photos and manage scan history")
   .argument("[path]", "Path to scan")
-  .option("-p, --path <path>", "Path to scan (deprecated, use positional)")
+  .option("--file <path...>", "Scan specific files by path")
   .option("--dry-run", "Show what would be done without making changes")
   .option("--rescan", "Force re-scan of cached photos")
   .option("-l, --limit <number>", "Limit number of new photos to scan", parseInt)
@@ -83,7 +83,7 @@ const scan = program
   .option("--person <name>", "Filter report to specific person (implies --report)")
   .option("-v, --verbose", "Show list of scanned files")
   .option("--report", "Show photos report after scan completes")
-  .action((path, options) => scanCommand({ ...options, path: path || options.path }));
+  .action((path, options) => scanCommand({ ...options, path }));
 
 scan
   .command("list")
@@ -125,6 +125,7 @@ const photos = program
   .option("--max-confidence <n>", "Filter photos with confidence <= n%", parseInt)
   .option("--after <date>", "Only include photos after date (YYYY-MM-DD)", parseDate)
   .option("--before <date>", "Only include photos before date (YYYY-MM-DD)", parseDate)
+  .option("--file <name>", "Filter by filename (substring match)")
   .option("-o, --open", "Open photos in Preview")
   .option("-l, --limit <number>", "Limit results", parseInt)
   .option("--offset <number>", "Skip first n results", parseInt)
@@ -143,6 +144,7 @@ photos
   .option("--min-confidence <n>", "Filter by confidence >= n% (with --all)", parseInt)
   .option("--max-confidence <n>", "Filter by confidence <= n% (with --all)", parseInt)
   .option("--person <name>", "Filter by person")
+  .option("--scan <id>", "Filter by scan ID (use 'latest' for most recent)")
   .option("--dry-run", "Preview without making changes")
   .action(photosApproveCommand);
 
