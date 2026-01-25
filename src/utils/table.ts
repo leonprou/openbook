@@ -7,6 +7,7 @@ export interface PhotoRow {
   status: string;
   path: string;
   date?: Date;
+  facesDetected?: number;
 }
 
 export interface ColumnWidths {
@@ -34,15 +35,20 @@ function formatDate(date?: Date): string {
  */
 export function printPhotoTable(rows: PhotoRow[], columns?: ColumnWidths): void {
   const { personName, folder: folderWidth, filename: filenameWidth } = columns ?? DEFAULT_COLUMN_WIDTHS;
+  const showFaces = rows.some(r => r.facesDetected !== undefined);
 
   const personHeader = "Person".padEnd(personName);
   const folderHeader = "Folder".padEnd(folderWidth);
-  console.log(` #   ${personHeader} Confidence  Status     Date        ${folderHeader} Filename`);
-  console.log("─".repeat(55 + personName + folderWidth + filenameWidth));
+  const facesHeader = showFaces ? "Faces  " : "";
+  console.log(` #   ${personHeader} Confidence  ${facesHeader}Status     Date        ${folderHeader} Filename`);
+  console.log("─".repeat(55 + personName + folderWidth + filenameWidth + (showFaces ? 7 : 0)));
 
   for (const row of rows) {
     const personPadded = row.person.slice(0, personName).padEnd(personName);
     const confStr = `${row.confidence.toFixed(1)}%`.padEnd(11);
+    const facesStr = showFaces
+      ? `${row.facesDetected !== undefined ? String(row.facesDetected) : "-"}`.padEnd(7)
+      : "";
     const statusPadded = row.status.padEnd(10);
     const dateStr = formatDate(row.date);
 
@@ -55,7 +61,7 @@ export function printPhotoTable(rows: PhotoRow[], columns?: ColumnWidths): void 
       filename.length > filenameWidth ? filename.slice(0, filenameWidth - 3) + "..." : filename;
 
     console.log(
-      ` ${String(row.index).padStart(2)}  ${personPadded} ${confStr} ${statusPadded} ${dateStr}  ${folderTrunc} ${filenameTrunc}`
+      ` ${String(row.index).padStart(2)}  ${personPadded} ${confStr} ${facesStr}${statusPadded} ${dateStr}  ${folderTrunc} ${filenameTrunc}`
     );
   }
 }

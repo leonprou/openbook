@@ -1,5 +1,5 @@
 import { FaceRecognitionClient } from "../rekognition/client";
-import type { FaceMatch, UserMatch, ScanResult } from "../rekognition/types";
+import type { FaceMatch, UserMatch, ScanResult, SearchDiagnostics } from "../rekognition/types";
 import type { PhotoInfo } from "../sources/types";
 import type { Config } from "../config";
 import { createLogger } from "../logger";
@@ -31,6 +31,7 @@ export interface VerboseInfo {
   path: string;
   fromCache: boolean;
   matches: Array<{ personName: string; confidence: number }>;
+  diagnostics?: SearchDiagnostics;
 }
 
 export type VerboseCallback = (info: VerboseInfo) => void;
@@ -45,6 +46,7 @@ export interface PhotoMatch {
     correctionStatus?: "approved" | "rejected";
   }>;
   fromCache: boolean;
+  facesDetected?: number;
 }
 
 export interface ScanStats {
@@ -61,17 +63,21 @@ interface ProcessedPhotoResult {
   fromCache: boolean;
   recognitions: Recognition[];
   cachedCorrections: Array<{ personId: number; type: string }>;
+  diagnostics?: SearchDiagnostics;
+  facesDetected?: number;
 }
 
 export class PhotoScanner {
   private client: FaceRecognitionClient;
   private minConfidence: number;
-  private searchMethod: "faces" | "users";
+  private searchMethod: "faces" | "users" | "compare";
+  private referencePhotos: Map<string, string>;  // personName -> reference photo path
 
-  constructor(client: FaceRecognitionClient, minConfidence: number, searchMethod: "faces" | "users" = "faces") {
+  constructor(client: FaceRecognitionClient, minConfidence: number, searchMethod: "faces" | "users" | "compare" = "faces", referencePhotos?: Map<string, string>) {
     this.client = client;
     this.minConfidence = minConfidence;
     this.searchMethod = searchMethod;
+    this.referencePhotos = referencePhotos ?? new Map();
   }
 
   /**
@@ -91,6 +97,21 @@ export class PhotoScanner {
           `searchMethod is 'users' but ${missingUsers.length} person(s) lack user vectors: ${names}. ` +
           `Run 'train cleanup --yes && train' to create user vectors.`
         );
+      }
+    } else if (this.searchMethod === "compare") {
+      const missingRefs = persons.filter(p => !p.referencePhotoPath);
+      if (missingRefs.length > 0) {
+        const names = missingRefs.map(p => p.name).join(", ");
+        throw new Error(
+          `searchMethod is 'compare' but ${missingRefs.length} person(s) lack reference photos: ${names}. ` +
+          `Run 'train' to set reference photos.`
+        );
+      }
+      // Populate referencePhotos map from persons
+      for (const person of persons) {
+        if (person.referencePhotoPath) {
+          this.referencePhotos.set(person.name, person.referencePhotoPath);
+        }
       }
     } else {
       // Using 'faces' mode - check if users exist as info
@@ -151,6 +172,7 @@ export class PhotoScanner {
         const cachedPhoto = forceRescan ? null : getPhotoByHash(photoHash);
         let recognitions: Recognition[];
         let fromCache = false;
+        let diagnostics: SearchDiagnostics | undefined;
 
         if (cachedPhoto && cachedPhoto.recognitions.length >= 0) {
           // Use cached recognitions
@@ -160,10 +182,15 @@ export class PhotoScanner {
           log.debug({ photo: photo.path, hash: photoHash }, "Using cached result");
         } else {
           // Call AWS Rekognition using configured search method
-          recognitions = await this.searchAndConvert(photo.path);
+          const result = await this.searchAndConvert(photo.path);
+          recognitions = result.recognitions;
+          diagnostics = result.diagnostics;
+          const facesDetected = diagnostics.faceDetected
+            ? 1 + (diagnostics.unsearchedFaceCount ?? 0)
+            : 0;
 
           // Save to database
-          savePhoto(photoHash, photo.path, fileInfo.size, scanId, recognitions, photo.photoDate ?? null);
+          savePhoto(photoHash, photo.path, fileInfo.size, scanId, recognitions, photo.photoDate ?? null, facesDetected);
           saveRecognitionHistory(photoHash, scanId, recognitions);
 
           // Track new scans for limit
@@ -183,6 +210,9 @@ export class PhotoScanner {
           }
 
           // Create PhotoMatch entry
+          const facesDetected = diagnostics?.faceDetected
+            ? 1 + (diagnostics.unsearchedFaceCount ?? 0)
+            : diagnostics ? 0 : undefined;
           const photoMatch: PhotoMatch = {
             photoPath: photo.path,
             photoHash,
@@ -196,6 +226,7 @@ export class PhotoScanner {
               ),
             })),
             fromCache,
+            facesDetected,
           };
 
           // Add to each person's list
@@ -219,6 +250,7 @@ export class PhotoScanner {
               personName: r.personName,
               confidence: r.confidence,
             })),
+            diagnostics,
           });
         }
       } catch (error) {
@@ -288,7 +320,10 @@ export class PhotoScanner {
       // Track in-flight and call AWS
       incrementInFlight();
       try {
-        const recognitions = await this.searchAndConvert(photo.path);
+        const { recognitions, diagnostics } = await this.searchAndConvert(photo.path);
+        const facesDetected = diagnostics.faceDetected
+          ? 1 + (diagnostics.unsearchedFaceCount ?? 0)
+          : 0;
 
         return {
           photo,
@@ -297,6 +332,8 @@ export class PhotoScanner {
           fromCache: false,
           recognitions,
           cachedCorrections: [],
+          diagnostics,
+          facesDetected,
         };
       } finally {
         decrementInFlight();
@@ -304,7 +341,10 @@ export class PhotoScanner {
     }
 
     // No limit - call AWS directly
-    const recognitions = await this.searchAndConvert(photo.path);
+    const { recognitions, diagnostics } = await this.searchAndConvert(photo.path);
+    const facesDetected = diagnostics.faceDetected
+      ? 1 + (diagnostics.unsearchedFaceCount ?? 0)
+      : 0;
 
     return {
       photo,
@@ -313,22 +353,56 @@ export class PhotoScanner {
       fromCache: false,
       recognitions,
       cachedCorrections: [],
+      diagnostics,
+      facesDetected,
     };
   }
 
   /**
    * Search faces or users based on configured search method and convert to recognitions.
    */
-  private async searchAndConvert(imagePath: string): Promise<Recognition[]> {
+  private async searchAndConvert(imagePath: string): Promise<{ recognitions: Recognition[]; diagnostics: SearchDiagnostics }> {
     if (this.searchMethod === "users") {
-      const matches = await this.client.searchUsers(imagePath);
+      const { matches, diagnostics } = await this.client.searchUsers(imagePath);
       log.debug({ imagePath, matchCount: matches.length, method: "users" }, "Search completed");
-      return this.convertUserMatchesToRecognitions(matches);
+      return { recognitions: await this.convertUserMatchesToRecognitions(matches), diagnostics };
+    } else if (this.searchMethod === "compare") {
+      return this.compareAgainstAllPersons(imagePath);
     } else {
-      const matches = await this.client.searchFaces(imagePath);
+      const { matches, diagnostics } = await this.client.searchFaces(imagePath);
       log.debug({ imagePath, matchCount: matches.length, method: "faces" }, "Search completed");
-      return this.convertMatchesToRecognitions(matches);
+      return { recognitions: await this.convertMatchesToRecognitions(matches), diagnostics };
     }
+  }
+
+  /**
+   * Compare target image against all persons' reference photos.
+   * Each CompareFaces call checks ALL faces in the target image.
+   */
+  private async compareAgainstAllPersons(imagePath: string): Promise<{ recognitions: Recognition[]; diagnostics: SearchDiagnostics }> {
+    const allMatches: FaceMatch[] = [];
+    let combinedDiagnostics: SearchDiagnostics = { faceDetected: false };
+
+    for (const [personName, refPath] of this.referencePhotos) {
+      const { matches, diagnostics } = await this.client.compareFaces(refPath, imagePath, personName);
+
+      // Merge diagnostics (use the most informative one)
+      if (diagnostics.faceDetected) {
+        combinedDiagnostics.faceDetected = true;
+        if (diagnostics.unsearchedFaceCount !== undefined) {
+          combinedDiagnostics.unsearchedFaceCount = Math.max(
+            combinedDiagnostics.unsearchedFaceCount ?? 0,
+            diagnostics.unsearchedFaceCount
+          );
+        }
+      }
+
+      allMatches.push(...matches);
+    }
+
+    log.debug({ imagePath, matchCount: allMatches.length, method: "compare" }, "Compare completed");
+    const recognitions = await this.convertCompareMatchesToRecognitions(allMatches);
+    return { recognitions, diagnostics: combinedDiagnostics };
   }
 
   /**
@@ -380,7 +454,7 @@ export class PhotoScanner {
         log.debug({ photo: result.photo.path, hash: result.hash }, "Using cached result");
       } else {
         // Save to database
-        savePhoto(result.hash, result.photo.path, result.fileSize, scanId, result.recognitions, result.photo.photoDate ?? null);
+        savePhoto(result.hash, result.photo.path, result.fileSize, scanId, result.recognitions, result.photo.photoDate ?? null, result.facesDetected ?? null);
         saveRecognitionHistory(result.hash, scanId, result.recognitions);
         newScans++;
       }
@@ -408,6 +482,7 @@ export class PhotoScanner {
             correctionStatus: this.getCorrectionStatus(r.personId, result.cachedCorrections),
           })),
           fromCache: result.fromCache,
+          facesDetected: result.facesDetected,
         };
 
         // Add to each person's list
@@ -431,6 +506,7 @@ export class PhotoScanner {
             personName: r.personName,
             confidence: r.confidence,
           })),
+          diagnostics: result.diagnostics,
         });
       }
 
@@ -542,7 +618,7 @@ export class PhotoScanner {
       }
 
       try {
-        const matches = await this.client.searchFaces(photo.path);
+        const { matches } = await this.client.searchFaces(photo.path);
         log.debug({ photo: photo.path, matchCount: matches.length }, "Search completed");
 
         if (matches.length > 0) {
@@ -582,7 +658,7 @@ export class PhotoScanner {
 
   async scanSinglePhoto(photoPath: string): Promise<ScanResult> {
     const startTime = Date.now();
-    const matches = await this.client.searchFaces(photoPath);
+    const { matches } = await this.client.searchFaces(photoPath);
 
     return {
       photoPath,
@@ -643,6 +719,41 @@ export class PhotoScanner {
         faceId: "", // User matches don't have individual face IDs
         boundingBox: match.boundingBox,
         searchMethod: "users",
+      });
+    }
+
+    return recognitions;
+  }
+
+  /**
+   * Convert CompareFaces matches to Recognition objects.
+   * Deduplicates by person, keeping highest confidence per person.
+   */
+  private async convertCompareMatchesToRecognitions(matches: FaceMatch[]): Promise<Recognition[]> {
+    // Deduplicate: keep best match per person (multiple faces in target may match same person)
+    const bestByPerson = new Map<string, FaceMatch>();
+    for (const match of matches) {
+      const existing = bestByPerson.get(match.personName);
+      if (!existing || match.confidence > existing.confidence) {
+        bestByPerson.set(match.personName, match);
+      }
+    }
+
+    const recognitions: Recognition[] = [];
+    for (const match of bestByPerson.values()) {
+      let person = getPerson(match.personName);
+      if (!person) {
+        person = createPerson(match.personName);
+        log.debug({ personName: match.personName, personId: person.id }, "Auto-created person record");
+      }
+
+      recognitions.push({
+        personId: person.id,
+        personName: match.personName,
+        confidence: match.confidence,
+        faceId: "",
+        boundingBox: match.boundingBox,
+        searchMethod: "compare",
       });
     }
 

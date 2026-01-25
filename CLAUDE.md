@@ -97,6 +97,7 @@ bun run start <command>
 |---------|-------------|
 | `claude-book train <path>` | Index faces from reference folders |
 | `claude-book train` | Use path from config.yaml |
+| `claude-book train --path <path>` | Override references folder path |
 | `claude-book train --person "Nina"` | Train only a specific person |
 | `claude-book train cleanup [--yes]` | Remove AWS Rekognition collection |
 

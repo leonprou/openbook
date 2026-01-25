@@ -44,6 +44,17 @@ export interface TrainingResult {
   errors: string[];
 }
 
+export interface SearchDiagnostics {
+  faceDetected: boolean;
+  detectionConfidence?: number;
+  unsearchedFaceCount?: number;
+}
+
+export interface SearchResult<T> {
+  matches: T[];
+  diagnostics: SearchDiagnostics;
+}
+
 export interface ScanResult {
   photoPath: string;
   matches: FaceMatch[];

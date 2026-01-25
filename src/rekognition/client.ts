@@ -6,6 +6,7 @@ import {
   IndexFacesCommand,
   SearchFacesByImageCommand,
   SearchUsersByImageCommand,
+  CompareFacesCommand,
   ListFacesCommand,
   ListUsersCommand,
   CreateUserCommand,
@@ -24,6 +25,8 @@ import type {
   UserMatch,
   CollectionInfo,
   BoundingBox,
+  SearchDiagnostics,
+  SearchResult,
 } from "./types";
 import { createLogger } from "../logger";
 import type { Config } from "../config";
@@ -37,6 +40,7 @@ export class FaceRecognitionClient {
   private limiter: Bottleneck;
   private config: Config;
   private userIdToName: Map<string, string> = new Map();
+  private debug: boolean = false;
 
   constructor(config: Config) {
     this.config = config;
@@ -60,6 +64,10 @@ export class FaceRecognitionClient {
       const userId = `user_${person.name.toLowerCase().replace(/\s+/g, "_")}`;
       this.userIdToName.set(userId, person.name);
     }
+  }
+
+  setDebug(enabled: boolean): void {
+    this.debug = enabled;
   }
 
   private resolvePersonName(userId: string): string {
@@ -160,7 +168,7 @@ export class FaceRecognitionClient {
     });
   }
 
-  async searchFaces(imagePath: string): Promise<FaceMatch[]> {
+  async searchFaces(imagePath: string): Promise<SearchResult<FaceMatch>> {
     return this.limiter.schedule(async () => {
       log.debug({ imagePath }, "Searching faces");
       const imageBytes = await this.prepareImage(imagePath);
@@ -174,6 +182,21 @@ export class FaceRecognitionClient {
             FaceMatchThreshold: this.minConfidence,
           })
         );
+
+        if (this.debug) {
+          console.log(`\n[DEBUG] SearchFacesByImage: ${imagePath}`);
+          console.log(JSON.stringify({
+            SearchedFaceConfidence: response.SearchedFaceConfidence,
+            SearchedFaceBoundingBox: response.SearchedFaceBoundingBox,
+            FaceMatches: response.FaceMatches,
+            UnmatchedFaces: (response as any).UnmatchedFaces ?? [],
+          }, null, 2));
+        }
+
+        const diagnostics: SearchDiagnostics = {
+          faceDetected: true,
+          detectionConfidence: response.SearchedFaceConfidence,
+        };
 
         const matches: FaceMatch[] = [];
 
@@ -205,11 +228,11 @@ export class FaceRecognitionClient {
           "Search completed"
         );
 
-        return deduplicatedMatches;
+        return { matches: deduplicatedMatches, diagnostics };
       } catch (error: any) {
         if (error.name === "InvalidParameterException") {
           log.debug({ imagePath }, "No face detected in image");
-          return [];
+          return { matches: [], diagnostics: { faceDetected: false } };
         }
         log.error({ imagePath, error: error.message }, "Search failed");
         throw error;
@@ -248,23 +271,17 @@ export class FaceRecognitionClient {
   async createUser(personName: string): Promise<string> {
     const userId = `user_${personName.toLowerCase().replace(/\s+/g, "_")}`;
 
-    try {
-      await this.client.send(
-        new CreateUserCommand({
-          CollectionId: this.collectionId,
-          UserId: userId,
-        })
-      );
-      log.debug({ personName, userId }, "User created");
-      return userId;
-    } catch (error: any) {
-      if (error.name === "ResourceInUseException") {
-        // User already exists, return the existing ID
-        log.debug({ personName, userId }, "User already exists");
-        return userId;
-      }
-      throw error;
-    }
+    // Delete existing user first to ensure clean face associations
+    await this.deleteUser(userId);
+
+    await this.client.send(
+      new CreateUserCommand({
+        CollectionId: this.collectionId,
+        UserId: userId,
+      })
+    );
+    log.debug({ personName, userId }, "User created");
+    return userId;
   }
 
   /**
@@ -312,7 +329,7 @@ export class FaceRecognitionClient {
   /**
    * Search for users matching faces in an image using aggregated user vectors.
    */
-  async searchUsers(imagePath: string): Promise<UserMatch[]> {
+  async searchUsers(imagePath: string): Promise<SearchResult<UserMatch>> {
     return this.limiter.schedule(async () => {
       log.debug({ imagePath }, "Searching users");
       const imageBytes = await this.prepareImage(imagePath);
@@ -326,6 +343,21 @@ export class FaceRecognitionClient {
             UserMatchThreshold: this.minConfidence,
           })
         );
+
+        if (this.debug) {
+          console.log(`\n[DEBUG] SearchUsersByImage: ${imagePath}`);
+          console.log(JSON.stringify({
+            SearchedFace: response.SearchedFace,
+            UserMatches: response.UserMatches,
+            UnsearchedFaces: response.UnsearchedFaces,
+          }, null, 2));
+        }
+
+        const diagnostics: SearchDiagnostics = {
+          faceDetected: true,
+          detectionConfidence: response.SearchedFace?.FaceDetail?.Confidence,
+          unsearchedFaceCount: response.UnsearchedFaces?.length,
+        };
 
         const matches: UserMatch[] = [];
 
@@ -350,13 +382,81 @@ export class FaceRecognitionClient {
           "User search completed"
         );
 
-        return matches;
+        return { matches, diagnostics };
       } catch (error: any) {
         if (error.name === "InvalidParameterException") {
           log.debug({ imagePath }, "No face detected in image");
-          return [];
+          return { matches: [], diagnostics: { faceDetected: false } };
         }
         log.error({ imagePath, error: error.message }, "User search failed");
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Compare a source reference face against all faces in a target image.
+   * Unlike SearchFacesByImage, this checks ALL faces in the target (up to 100).
+   * @param sourceImagePath - Reference photo of a known person
+   * @param targetImagePath - Photo to search for that person
+   * @param personName - Name of the person (for match labeling)
+   */
+  async compareFaces(sourceImagePath: string, targetImagePath: string, personName: string): Promise<SearchResult<FaceMatch>> {
+    return this.limiter.schedule(async () => {
+      log.debug({ sourceImagePath, targetImagePath, personName }, "Comparing faces");
+      const sourceBytes = await this.prepareImage(sourceImagePath);
+      const targetBytes = await this.prepareImage(targetImagePath);
+
+      try {
+        const response = await this.client.send(
+          new CompareFacesCommand({
+            SourceImage: { Bytes: sourceBytes },
+            TargetImage: { Bytes: targetBytes },
+            SimilarityThreshold: this.minConfidence,
+            QualityFilter: this.config.rekognition.indexing.qualityFilter,
+          })
+        );
+
+        if (this.debug) {
+          console.log(`\n[DEBUG] CompareFaces: ${targetImagePath} (source: ${personName})`);
+          console.log(JSON.stringify({
+            SourceImageFace: response.SourceImageFace,
+            FaceMatches: response.FaceMatches,
+            UnmatchedFaces: response.UnmatchedFaces,
+          }, null, 2));
+        }
+
+        const diagnostics: SearchDiagnostics = {
+          faceDetected: !!response.SourceImageFace,
+          detectionConfidence: response.SourceImageFace?.Confidence,
+          unsearchedFaceCount: response.UnmatchedFaces?.length,
+        };
+
+        const matches: FaceMatch[] = [];
+
+        for (const match of response.FaceMatches ?? []) {
+          if (match.Face && match.Similarity) {
+            matches.push({
+              personName,
+              confidence: match.Similarity,
+              faceId: "",  // CompareFaces doesn't use collection face IDs
+              boundingBox: this.convertBoundingBox(match.Face.BoundingBox),
+            });
+          }
+        }
+
+        log.debug(
+          { targetImagePath, personName, matchCount: matches.length },
+          "Compare completed"
+        );
+
+        return { matches, diagnostics };
+      } catch (error: any) {
+        if (error.name === "InvalidParameterException") {
+          log.debug({ sourceImagePath, targetImagePath }, "No face detected in image");
+          return { matches: [], diagnostics: { faceDetected: false } };
+        }
+        log.error({ targetImagePath, error: error.message }, "Compare failed");
         throw error;
       }
     });

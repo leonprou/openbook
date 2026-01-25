@@ -61,6 +61,8 @@ claude-book train [path]
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `--path <path>` | Path to references folder (overrides config) |
+| `--person <name>` | Train only a specific person |
 | `--verbose` | Show detailed indexing progress |
 
 **Reference folder structure:**

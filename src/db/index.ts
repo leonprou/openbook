@@ -13,6 +13,7 @@ export interface Person {
   faceCount: number;
   photoCount: number;
   userId: string | null;  // AWS Rekognition User ID for aggregated vectors
+  referencePhotoPath: string | null;  // Best reference photo for CompareFaces
 }
 
 export interface Scan {
@@ -37,7 +38,7 @@ export interface Recognition {
     width: number;
     height: number;
   };
-  searchMethod?: "faces" | "users";  // Track which search method found this match
+  searchMethod?: "faces" | "users" | "compare";  // Track which search method found this match
 }
 
 export interface Correction {
@@ -96,7 +97,7 @@ export interface ConfidenceBucketStats {
 }
 
 export interface SearchMethodStats {
-  method: "faces" | "users";
+  method: "faces" | "users" | "compare";
   approvedCount: number;
   rejectedCount: number;
   pendingCount: number;
@@ -194,6 +195,13 @@ export function initDatabase(): void {
     // Column already exists, ignore error
   }
 
+  // Migration: add reference_photo_path column to persons table
+  try {
+    database.exec("ALTER TABLE persons ADD COLUMN reference_photo_path TEXT");
+  } catch {
+    // Column already exists, ignore error
+  }
+
   // Migration: add photo_date column to photos table
   try {
     database.exec("ALTER TABLE photos ADD COLUMN photo_date TEXT");
@@ -201,6 +209,13 @@ export function initDatabase(): void {
     // Column already exists, ignore error
   }
   database.exec("CREATE INDEX IF NOT EXISTS idx_photos_photo_date ON photos(photo_date)");
+
+  // Migration: add faces_detected column to photos table
+  try {
+    database.exec("ALTER TABLE photos ADD COLUMN faces_detected INTEGER");
+  } catch {
+    // Column already exists, ignore error
+  }
 
   // Directory cache for fast scan skipping
   database.exec(`
@@ -258,6 +273,7 @@ export function createPerson(name: string): Person {
     face_count: number;
     photo_count: number;
     user_id: string | null;
+    reference_photo_path: string | null;
   };
 
   return {
@@ -269,6 +285,7 @@ export function createPerson(name: string): Person {
     faceCount: row.face_count,
     photoCount: row.photo_count,
     userId: row.user_id,
+    referencePhotoPath: row.reference_photo_path,
   };
 }
 
@@ -284,6 +301,7 @@ export function getPerson(name: string): Person | null {
     face_count: number;
     photo_count: number;
     user_id: string | null;
+    reference_photo_path: string | null;
   } | null;
 
   if (!row) return null;
@@ -297,6 +315,7 @@ export function getPerson(name: string): Person | null {
     faceCount: row.face_count,
     photoCount: row.photo_count,
     userId: row.user_id,
+    referencePhotoPath: row.reference_photo_path,
   };
 }
 
@@ -312,6 +331,7 @@ export function getPersonById(id: number): Person | null {
     face_count: number;
     photo_count: number;
     user_id: string | null;
+    reference_photo_path: string | null;
   } | null;
 
   if (!row) return null;
@@ -325,6 +345,7 @@ export function getPersonById(id: number): Person | null {
     faceCount: row.face_count,
     photoCount: row.photo_count,
     userId: row.user_id,
+    referencePhotoPath: row.reference_photo_path,
   };
 }
 
@@ -340,6 +361,7 @@ export function getAllPersons(): Person[] {
     face_count: number;
     photo_count: number;
     user_id: string | null;
+    reference_photo_path: string | null;
   }>;
 
   return rows.map((row) => ({
@@ -351,6 +373,7 @@ export function getAllPersons(): Person[] {
     faceCount: row.face_count,
     photoCount: row.photo_count,
     userId: row.user_id,
+    referencePhotoPath: row.reference_photo_path,
   }));
 }
 
@@ -370,6 +393,12 @@ export function updatePersonUserId(personId: number, userId: string | null): voi
   const database = getDb();
   const stmt = database.query("UPDATE persons SET user_id = $userId WHERE id = $id");
   stmt.run({ $userId: userId, $id: personId });
+}
+
+export function updatePersonReferencePhoto(personId: number, path: string | null): void {
+  const database = getDb();
+  const stmt = database.query("UPDATE persons SET reference_photo_path = $path WHERE id = $id");
+  stmt.run({ $path: path, $id: personId });
 }
 
 // Scan functions
@@ -635,21 +664,23 @@ export function savePhoto(
   fileSize: number | null,
   scanId: number,
   recognitions: Recognition[],
-  photoDate: string | null = null
+  photoDate: string | null = null,
+  facesDetected: number | null = null
 ): void {
   const database = getDb();
   const now = new Date().toISOString();
 
   const stmt = database.query(`
-    INSERT INTO photos (hash, path, file_size, first_scanned_at, last_scanned_at, last_scan_id, recognitions, corrections, photo_date)
-    VALUES ($hash, $path, $fileSize, $now, $now, $scanId, $recognitions, '[]', $photoDate)
+    INSERT INTO photos (hash, path, file_size, first_scanned_at, last_scanned_at, last_scan_id, recognitions, corrections, photo_date, faces_detected)
+    VALUES ($hash, $path, $fileSize, $now, $now, $scanId, $recognitions, '[]', $photoDate, $facesDetected)
     ON CONFLICT(hash) DO UPDATE SET
       path = excluded.path,
       file_size = excluded.file_size,
       last_scanned_at = excluded.last_scanned_at,
       last_scan_id = excluded.last_scan_id,
       recognitions = excluded.recognitions,
-      photo_date = COALESCE(photos.photo_date, excluded.photo_date)
+      photo_date = COALESCE(photos.photo_date, excluded.photo_date),
+      faces_detected = excluded.faces_detected
   `);
 
   stmt.run({
@@ -660,6 +691,7 @@ export function savePhoto(
     $scanId: scanId,
     $recognitions: JSON.stringify(recognitions),
     $photoDate: photoDate,
+    $facesDetected: facesDetected,
   });
 }
 
@@ -844,9 +876,10 @@ export function getAccuracyStats(): AccuracyStats {
   }));
 
   // Initialize search method stats
-  const methodStats = new Map<"faces" | "users", { approved: number; rejected: number; pending: number }>([
+  const methodStats = new Map<"faces" | "users" | "compare", { approved: number; rejected: number; pending: number }>([
     ["faces", { approved: 0, rejected: 0, pending: 0 }],
     ["users", { approved: 0, rejected: 0, pending: 0 }],
+    ["compare", { approved: 0, rejected: 0, pending: 0 }],
   ]);
 
   // Process each photo

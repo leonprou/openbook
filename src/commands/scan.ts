@@ -42,6 +42,7 @@ interface ScanOptions {
   before?: Date;
   person?: string;
   verbose?: boolean;
+  debug?: boolean;
   report?: boolean;
 }
 
@@ -140,6 +141,10 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
   if (!collectionInfo || collectionInfo.faceCount === 0) {
     spinner.fail("No faces indexed. Run 'claude-book train' first.");
     process.exit(1);
+  }
+
+  if (options.debug) {
+    client.setDebug(true);
   }
 
   // Show collection info with search method
@@ -317,13 +322,25 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     directoryChecker: scanChecker,
   });
 
-  // Verbose output helper
+  // Track diagnostics for all photos (always), verbose log only when --verbose
   const verboseLog: VerboseInfo[] = [];
-  const onVerbose = options.verbose
-    ? (info: VerboseInfo) => {
-        verboseLog.push(info);
+  let noFaceCount = 0;
+  let belowThresholdCount = 0;
+  let belowThresholdConfidence: number | undefined; // Last seen detection confidence for below-threshold photos
+  const onVerbose = (info: VerboseInfo) => {
+    if (options.verbose) {
+      verboseLog.push(info);
+    }
+    // Track diagnostics for unmatched new photos
+    if (!info.fromCache && info.matches.length === 0 && info.diagnostics) {
+      if (!info.diagnostics.faceDetected) {
+        noFaceCount++;
+      } else {
+        belowThresholdCount++;
+        belowThresholdConfidence = info.diagnostics.detectionConfidence;
       }
-    : undefined;
+    }
+  };
 
   const { personPhotos, stats } = await scanner.scanPhotosParallel(
     freshSource.scan(),
@@ -351,10 +368,20 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     console.log("\nScanned files:");
     for (const info of verboseLog) {
       const status = info.fromCache ? "[CACHED]" : "[NEW]   ";
-      const matches = info.matches.length > 0
-        ? info.matches.map(m => `${m.personName} (${m.confidence.toFixed(0)}%)`).join(", ")
-        : "no match";
-      console.log(`  ${status} ${info.path} - ${matches}`);
+      let matchStr: string;
+      if (info.matches.length > 0) {
+        matchStr = info.matches.map(m => `${m.personName} (${m.confidence.toFixed(0)}%)`).join(", ");
+      } else if (info.diagnostics && !info.diagnostics.faceDetected) {
+        matchStr = "no face detected";
+      } else if (info.diagnostics?.faceDetected) {
+        const conf = info.diagnostics.detectionConfidence;
+        matchStr = conf !== undefined
+          ? `face detected (${conf.toFixed(1)}%), no match`
+          : "face detected, no match";
+      } else {
+        matchStr = "no match";
+      }
+      console.log(`  ${status} ${info.path} - ${matchStr}`);
     }
   }
 
@@ -388,7 +415,26 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
     if (stats.photosCached > 0) {
       console.log("\nNo new faces matched (all photos were cached).");
     } else {
-      console.log("\nNo faces matched. Try:");
+      // Show diagnostic breakdown
+      const diagParts: string[] = [];
+      if (noFaceCount > 0) {
+        diagParts.push(`${noFaceCount} ${noFaceCount === 1 ? "photo" : "photos"}: no face detected`);
+      }
+      if (belowThresholdCount > 0) {
+        const confStr = belowThresholdConfidence !== undefined
+          ? ` (detection confidence: ${belowThresholdConfidence.toFixed(1)}%)`
+          : "";
+        diagParts.push(`${belowThresholdCount} ${belowThresholdCount === 1 ? "photo" : "photos"}: face detected${confStr}, no match above threshold`);
+      }
+      if (diagParts.length > 0) {
+        console.log("\nNo faces matched:");
+        for (const part of diagParts) {
+          console.log(`  - ${part}`);
+        }
+        console.log("Try:");
+      } else {
+        console.log("\nNo faces matched. Try:");
+      }
       console.log("  - Adding more reference photos");
       console.log("  - Lowering minConfidence in config.yaml");
     }
@@ -424,6 +470,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
         status: "pending",
         path: match.photoPath,
         date: photoDate,
+        facesDetected: match.facesDetected,
       });
     }
   }

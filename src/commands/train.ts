@@ -5,9 +5,10 @@ import { basename } from "path";
 import { loadConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { scanReferencesDirectory } from "../sources/local";
-import { initDatabase, createPerson, updatePersonFaceCount, updatePersonUserId, getPerson, getAllPersons } from "../db";
+import { initDatabase, createPerson, updatePersonFaceCount, updatePersonUserId, updatePersonReferencePhoto, getPerson, getAllPersons } from "../db";
 
 interface TrainOptions {
+  path?: string;
   references?: string;
   person?: string;
 }
@@ -25,7 +26,7 @@ export async function trainCommand(
     console.warn("");
   }
 
-  const referencesPath = path ?? options.references ?? config.training.referencesPath;
+  const referencesPath = path ?? options.path ?? options.references ?? config.training.referencesPath;
 
   const spinner = ora();
 
@@ -112,6 +113,7 @@ export async function trainCommand(
 
     // Collect face IDs for user association
     const faceIds: string[] = [];
+    let bestRefPhoto: { path: string; confidence: number } | null = null;
 
     for (const photoPath of photos) {
       progressBar.increment({ person: personName });
@@ -121,6 +123,10 @@ export async function trainCommand(
         if (face) {
           personResult.indexed++;
           faceIds.push(face.faceId);
+          // Track highest-confidence face as best reference photo
+          if (!bestRefPhoto || face.confidence > bestRefPhoto.confidence) {
+            bestRefPhoto = { path: photoPath, confidence: face.confidence };
+          }
         } else {
           personResult.errors.push(`No face detected: ${photoPath}`);
         }
@@ -129,8 +135,11 @@ export async function trainCommand(
       }
     }
 
-    // Update face count in database
+    // Update face count and best reference photo in database
     updatePersonFaceCount(person.id, personResult.indexed);
+    if (bestRefPhoto) {
+      updatePersonReferencePhoto(person.id, bestRefPhoto.path);
+    }
 
     // Create user and associate faces if using user vectors
     if (useUserVectors && faceIds.length > 0) {

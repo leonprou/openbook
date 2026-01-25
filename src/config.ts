@@ -12,7 +12,7 @@ const configSchema = z.object({
     .object({
       collectionId: z.string().default("claude-book-faces"),
       minConfidence: z.number().min(0).max(100).default(80),
-      searchMethod: z.enum(["faces", "users"]).default("faces"),
+      searchMethod: z.enum(["faces", "users", "compare"]).default("faces"),
       rateLimit: z
         .object({
           minTime: z.number().min(0).default(200),

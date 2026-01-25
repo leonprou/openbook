@@ -41,7 +41,8 @@ const train = program
   .command("train")
   .description("Index faces from reference folders")
   .argument("[path]", "Path to references folder")
-  .option("-r, --references <path>", "Path to references folder (deprecated, use positional)")
+  .option("--path <path>", "Path to references folder (overrides config)")
+  .option("-r, --references <path>", "Path to references folder (deprecated, use --path)")
   .option("--person <name>", "Train only a specific person")
   .action(trainCommand);
 
@@ -82,6 +83,7 @@ const scan = program
   .option("--before <date>", "Only include photos before date (YYYY-MM-DD)", parseDate)
   .option("--person <name>", "Filter report to specific person (implies --report)")
   .option("-v, --verbose", "Show list of scanned files")
+  .option("--debug", "Show raw AWS Rekognition API responses")
   .option("--report", "Show photos report after scan completes")
   .action((path, options) => scanCommand({ ...options, path }));
 

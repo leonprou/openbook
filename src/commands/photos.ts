@@ -83,6 +83,7 @@ interface PhotoResult {
   scanId: number | null;
   scannedAt: string;
   date?: Date;
+  facesDetected?: number;
 }
 
 interface LastQuery {
@@ -173,6 +174,7 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
     last_scan_id: number | null;
     last_scanned_at: string;
     photo_date: string | null;
+    faces_detected: number | null;
   }>;
 
   let index = 1;
@@ -211,7 +213,7 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
 
     // Handle photos with no recognitions
     if (allRecognitions.length === 0) {
-      if (filter.scanId) {
+      if (filter.scanId && (!filter.person || filter.person === "all")) {
         results.push({
           index: index++,
           hash: row.hash,
@@ -222,6 +224,7 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
           scanId: row.last_scan_id,
           scannedAt: row.last_scanned_at,
           date: photoDate,
+          facesDetected: row.faces_detected ?? undefined,
         });
       }
       continue;
@@ -258,6 +261,7 @@ function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: numb
         scanId: row.last_scan_id,
         scannedAt: row.last_scanned_at,
         date: photoDate,
+        facesDetected: row.faces_detected ?? undefined,
       });
 
       index++;
