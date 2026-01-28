@@ -37,6 +37,8 @@ When the user asks to find, show, or review photos (e.g. "show me photos of Mom"
 
 4. **Scan new photos**: If the user asks to scan a folder, run `bun run start scan <path>` and report the results.
 
+5. **Default to approved photos**: When showing photos, use `--status approved` by default. Only use `--status pending`, `--status rejected`, or `--status all` when the user explicitly asks for those statuses (e.g., "show pending photos", "show all photos", "include rejected").
+
 Always use `bun run start` (not `claude-book`) to invoke commands from this project directory.
 
 ### Scanning for New Photos
