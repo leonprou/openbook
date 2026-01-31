@@ -2,6 +2,12 @@
   "name": "claude-book",
   "version": "0.1.0",
   "description": "CLI tool for organizing family photos using face recognition",
+  "author": "leonprou",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leonprou/claude-book"
+  },
   "type": "module",
   "bin": {
     "claude-book": "./src/index.ts"

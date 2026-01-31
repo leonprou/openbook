@@ -1,0 +1,57 @@
+# Claude Book Configuration Example
+# Copy this file to config.yaml and customize for your setup
+
+aws:
+  region: us-east-1
+
+rekognition:
+  collectionId: claude-book-faces
+  minConfidence: 80           # Match threshold (0-100)
+  searchMethod: faces         # "faces" (individual) or "users" (aggregated vectors) or "compare" (direct comparison)
+  rateLimit:
+    minTime: 200              # Minimum ms between requests
+    maxConcurrent: 5          # Max concurrent API calls
+  indexing:
+    maxFaces: 1               # Faces to index per reference photo
+    qualityFilter: AUTO       # NONE, AUTO, LOW, MEDIUM, HIGH
+    detectionAttributes: DEFAULT  # DEFAULT or ALL
+  searching:
+    maxFaces: 10              # Max faces to search per photo
+    maxUsers: 10              # Max users to search per photo (when searchMethod: users)
+
+imageProcessing:
+  maxDimension: 4096          # Max pixel dimension before resizing
+  jpegQuality: 90             # Quality for JPEG conversion (1-100)
+
+sources:
+  local:
+    paths:
+      - ~/Pictures/Family     # Folders to scan for photos
+    extensions:
+      - ".jpg"
+      - ".jpeg"
+      - ".png"
+      - ".heic"
+      - ".HEIC"
+
+training:
+  referencesPath: ./references  # Path to reference photos for training
+
+albums:
+  prefix: "Claude Book"       # Album naming: "Claude Book: Mom"
+
+session:
+  timeoutMinutes: 15          # Session cache validity
+
+display:
+  photoLimit: 250             # Max photos shown in list output
+  pageSize: 50                # Results per page (with --page)
+  progressBarWidth: 20        # Width of progress bar in characters
+  columns:
+    personName: 12            # Person name column width
+    folder: 16                # Folder column width
+    filename: 35              # Filename column width
+
+scanning:
+  concurrency: 10             # Parallel AWS requests (1-10)
+  maxSortBuffer: 100000       # Max files to sort in memory

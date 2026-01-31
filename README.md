@@ -309,6 +309,39 @@ claude-book scan ~/Downloads/TelegramExport/photos
    ```
 3. **Bun** runtime: https://bun.sh
 
+## AWS Costs
+
+Claude Book uses AWS Rekognition, which is **not free** but is very affordable for personal use.
+
+### Pricing Overview (as of 2024)
+
+- **Face Detection**: ~$1.00 per 1,000 images
+- **Face Search**: ~$1.00 per 1,000 searches
+- **Storage**: $0.01 per 1,000 face vectors per month
+
+### Example Cost Scenarios
+
+| Scenario | Photos | Cost (one-time) | Monthly Storage |
+|----------|--------|-----------------|-----------------|
+| Small library | 1,000 photos | ~$2 | ~$0.01/month |
+| Medium library | 10,000 photos | ~$20 | ~$0.10/month |
+| Large library | 50,000 photos | ~$100 | ~$0.50/month |
+
+### Cost Optimization Tips
+
+1. **Use the cache**: Re-scanning cached photos is free (no AWS calls)
+2. **Start small**: Test with `--limit 500` before scanning your entire library
+3. **Train efficiently**: Only 3-5 reference photos per person needed
+4. **Review before export**: Fix mistakes before creating albums (no re-scanning needed)
+
+### Free Tier
+
+AWS Free Tier includes:
+- 1,000 faces stored per month (first 12 months)
+- 1,000 face searches per month (first 12 months)
+
+For most personal photo libraries, costs are minimal after the initial scan.
+
 ## Tuning Recognition
 
 ### Too Many False Positives?
