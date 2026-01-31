@@ -2,7 +2,7 @@
 
 ## Overview
 
-Claude Book uses a two-phase face recognition system:
+openbook uses a two-phase face recognition system:
 
 1. **Training** - Index reference photos of known people to AWS Rekognition
 2. **Scanning** - Match faces in your photo library against trained faces
@@ -324,7 +324,7 @@ Uses Bottleneck library to limit API calls:
 
 ### Search Methods
 
-Claude Book supports two face matching methods via `searchMethod` config:
+openbook supports two face matching methods via `searchMethod` config:
 
 | Method | API | Description | Best For |
 |--------|-----|-------------|----------|
@@ -384,7 +384,7 @@ aws:
   region: us-east-1
 
 rekognition:
-  collectionId: claude-book-faces
+  collectionId: openbook-faces
   minConfidence: 80              # Match threshold (0-100)
   searchMethod: faces            # "faces" (individual) or "users" (aggregated)
   rateLimit:
@@ -412,7 +412,7 @@ training:
   referencesPath: ./references
 
 albums:
-  prefix: "Claude Book"          # Album naming: "Claude Book: Mom"
+  prefix: "openbook"          # Album naming: "openbook: Mom"
 
 session:
   timeoutMinutes: 15             # Session cache validity

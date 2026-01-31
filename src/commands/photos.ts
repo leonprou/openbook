@@ -55,7 +55,7 @@ import { loadConfig } from "../config";
 import { addPhotosToAlbum, checkOsxphotosInstalled } from "../export/albums";
 import { Database } from "bun:sqlite";
 
-const SESSION_FILE = ".claude-book-session.json";
+const SESSION_FILE = ".openbook-session.json";
 
 // Photo status types
 type PhotoStatus = "pending" | "approved" | "rejected" | "manual" | "all";
@@ -133,7 +133,7 @@ function getRecognitionStatus(
  * Query photos with filters
  */
 function queryPhotos(filter: PhotoFilter): { results: PhotoResult[]; total: number } {
-  const db = new Database(resolve(process.cwd(), ".claude-book.db"));
+  const db = new Database(resolve(process.cwd(), ".openbook.db"));
   const results: PhotoResult[] = [];
 
   // Build query with conditions
@@ -409,7 +409,7 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan' first.");
+    console.log("Database not initialized. Run 'openbook scan' first.");
     return;
   }
 
@@ -421,7 +421,7 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
   if (options.scan === "latest") {
     const lastScan = getLastScan();
     if (!lastScan) {
-      console.log("No scans found. Run 'claude-book scan' first.");
+      console.log("No scans found. Run 'openbook scan' first.");
       return;
     }
     scanId = lastScan.id;
@@ -509,9 +509,9 @@ export async function photosListCommand(options: PhotosListOptions): Promise<voi
 
   console.log();
   console.log("Commands:");
-  console.log("  claude-book photos approve <indexes>      Approve by index (1,2,4-6)");
-  console.log("  claude-book photos approve --all          Approve all shown");
-  console.log("  claude-book photos reject <indexes>       Reject by index");
+  console.log("  openbook photos approve <indexes>      Approve by index (1,2,4-6)");
+  console.log("  openbook photos approve --all          Approve all shown");
+  console.log("  openbook photos reject <indexes>       Reject by index");
 }
 
 /**
@@ -525,7 +525,7 @@ export async function photosApproveCommand(
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan' first.");
+    console.log("Database not initialized. Run 'openbook scan' first.");
     return;
   }
 
@@ -546,7 +546,7 @@ export async function photosApproveCommand(
     if (options.scan === "latest") {
       const lastScan = getLastScan();
       if (!lastScan) {
-        console.log("No scans found. Run 'claude-book scan' first.");
+        console.log("No scans found. Run 'openbook scan' first.");
         return;
       }
       scanId = lastScan.id;
@@ -577,7 +577,7 @@ export async function photosApproveCommand(
     // Use cached query for --all without filters
     const lastQuery = loadLastQuery();
     if (!lastQuery) {
-      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      console.log("No recent photo list found. Run 'openbook photos' first.");
       return;
     }
     toApprove = [...lastQuery.results];
@@ -591,7 +591,7 @@ export async function photosApproveCommand(
     // Index-based approval from cached query
     const lastQuery = loadLastQuery();
     if (!lastQuery) {
-      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      console.log("No recent photo list found. Run 'openbook photos' first.");
       return;
     }
     const approveIndexes = new Set(parseIndexes(indexesOrPerson));
@@ -661,7 +661,7 @@ async function approveByPersonPath(
 
   const photo = getPhotoByHash(hash);
   if (!photo) {
-    console.error("Photo not found in database. Run 'claude-book scan' first.");
+    console.error("Photo not found in database. Run 'openbook scan' first.");
     process.exit(1);
   }
 
@@ -690,7 +690,7 @@ export async function photosRejectCommand(
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan' first.");
+    console.log("Database not initialized. Run 'openbook scan' first.");
     return;
   }
 
@@ -737,7 +737,7 @@ export async function photosRejectCommand(
     // Use cached query for --all without filters
     const lastQuery = loadLastQuery();
     if (!lastQuery) {
-      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      console.log("No recent photo list found. Run 'openbook photos' first.");
       return;
     }
     toReject = [...lastQuery.results];
@@ -751,7 +751,7 @@ export async function photosRejectCommand(
     // Index-based rejection from cached query
     const lastQuery = loadLastQuery();
     if (!lastQuery) {
-      console.log("No recent photo list found. Run 'claude-book photos' first.");
+      console.log("No recent photo list found. Run 'openbook photos' first.");
       return;
     }
     const rejectIndexes = new Set(parseIndexes(indexesOrPerson));
@@ -821,7 +821,7 @@ async function rejectByPersonPath(
 
   const photo = getPhotoByHash(hash);
   if (!photo) {
-    console.error("Photo not found in database. Run 'claude-book scan' first.");
+    console.error("Photo not found in database. Run 'openbook scan' first.");
     process.exit(1);
   }
 
@@ -892,7 +892,7 @@ async function rejectByMaxConfidence(
 async function rejectByFilename(filename: string, dryRun?: boolean): Promise<void> {
   const lastQuery = loadLastQuery();
   if (!lastQuery) {
-    console.log("No recent photo list found. Run 'claude-book photos' first.");
+    console.log("No recent photo list found. Run 'openbook photos' first.");
     return;
   }
 
@@ -941,7 +941,7 @@ export async function photosAddCommand(
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan' first.");
+    console.log("Database not initialized. Run 'openbook scan' first.");
     return;
   }
 
@@ -971,7 +971,7 @@ export async function photosAddCommand(
 
   const photo = getPhotoByHash(hash);
   if (!photo) {
-    console.error("Photo not found in database. Run 'claude-book scan' first.");
+    console.error("Photo not found in database. Run 'openbook scan' first.");
     process.exit(1);
   }
 
@@ -979,7 +979,7 @@ export async function photosAddCommand(
   const hasRecognition = photo.recognitions.some((r) => r.personId === person.id);
   if (hasRecognition) {
     console.log(`"${person.name}" is already detected in this photo.`);
-    console.log("Use 'claude-book photos approve' to confirm the match.");
+    console.log("Use 'openbook photos approve' to confirm the match.");
     return;
   }
 
@@ -1000,7 +1000,7 @@ export async function photosExportCommand(options: PhotosExportOptions): Promise
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan' first.");
+    console.log("Database not initialized. Run 'openbook scan' first.");
     return;
   }
 
@@ -1033,7 +1033,7 @@ export async function photosExportCommand(options: PhotosExportOptions): Promise
     if (options.person) {
       console.log(`No approved photos found for "${options.person}".`);
     }
-    console.log("Use 'claude-book photos approve' to approve photos first.");
+    console.log("Use 'openbook photos approve' to approve photos first.");
     return;
   }
 

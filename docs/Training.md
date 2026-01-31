@@ -16,10 +16,10 @@ cp ~/Photos/mom-outdoor.jpg references/Mom/
 # ... repeat for each person
 
 # 3. Run training
-claude-book train
+openbook train
 
 # 4. Verify it worked
-claude-book status
+openbook status
 ```
 
 **Tips for quick success:**
@@ -95,16 +95,16 @@ For each person, try to include:
 
 ```bash
 # 1. Check current recognition performance
-claude-book photos --status pending --person "Mom"
+openbook photos --status pending --person "Mom"
 
 # 2. If many missed photos, add diverse samples
 cp new-photos/* references/Mom/
 
 # 3. Retrain
-claude-book train
+openbook train
 
 # 4. Rescan to apply new training
-claude-book scan --rescan
+openbook scan --rescan
 ```
 
 ## Anti-Patterns to Avoid

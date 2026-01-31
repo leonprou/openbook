@@ -26,7 +26,7 @@ import { clearCommand } from "./commands/clear";
 const program = new Command();
 
 program
-  .name("claude-book")
+  .name("openbook")
   .description("CLI tool for organizing family photos using face recognition")
   .version("0.1.0")
   .enablePositionalOptions();

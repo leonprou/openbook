@@ -20,12 +20,12 @@ export async function statsCommand(): Promise<void> {
   );
 
   if (totalRecognitions === 0) {
-    console.log("No recognitions found. Run 'claude-book scan' first.");
+    console.log("No recognitions found. Run 'openbook scan' first.");
     return;
   }
 
   if (stats.overall.totalDecisions === 0) {
-    console.log("No corrections recorded yet. Use 'claude-book photos approve/reject' to review photos.");
+    console.log("No corrections recorded yet. Use 'openbook photos approve/reject' to review photos.");
     console.log(`\nTotal pending recognitions: ${totalRecognitions}`);
     return;
   }

@@ -181,8 +181,8 @@ rekognition:
   searchMethod: faces
 ```
 ```bash
-claude-book train
-claude-book scan
+openbook train
+openbook scan
 ```
 
 **To use aggregated user vectors:**
@@ -191,9 +191,9 @@ rekognition:
   searchMethod: users
 ```
 ```bash
-claude-book train cleanup --yes  # Remove old collection
-claude-book train                 # Re-train with user creation
-claude-book scan                  # Uses searchUsers automatically
+openbook train cleanup --yes  # Remove old collection
+openbook train                 # Re-train with user creation
+openbook scan                  # Uses searchUsers automatically
 ```
 
 ### Switching Between Methods

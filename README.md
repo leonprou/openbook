@@ -1,4 +1,4 @@
-# Claude Book
+# openbook
 
 A CLI tool for organizing family photos using face recognition. Automatically identifies family members in your photo library and organizes them into Apple Photos albums.
 
@@ -21,42 +21,42 @@ uv tool install osxphotos
 # or: pip install osxphotos
 
 # 1. Initialize (creates config, sets up AWS collection)
-claude-book init
+openbook init
 
 # 2. Train with reference photos
 #    Create folders: ./references/mom/, ./references/dad/, ./references/kid1/
 #    Add 3-5 clear face photos to each folder
-claude-book train -r ./references
+openbook train -r ./references
 
 # 3. Scan your photo library
-claude-book scan ~/Pictures/Family
+openbook scan ~/Pictures/Family
 
 # 4. Review and correct any mistakes
-claude-book reject --person "Mom" --photo ~/Pictures/wrong_match.jpg
+openbook reject --person "Mom" --photo ~/Pictures/wrong_match.jpg
 
 # 5. Re-scan uses cache, so it's fast!
-claude-book scan ~/Pictures/Family
+openbook scan ~/Pictures/Family
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `claude-book init` | Initialize config and AWS Rekognition collection |
-| `claude-book train -r <path>` | Index faces from reference folders |
-| `claude-book scan <path>` | Scan photos and create review albums |
-| `claude-book scan <path> --dry-run` | Preview what albums would be created |
-| `claude-book scan <path> --rescan` | Force re-scan of cached photos |
-| `claude-book approve` | Approve review albums and create final albums |
-| `claude-book approve --person "Name" --photo <path>` | Approve a specific recognition |
-| `claude-book reject --person "Name" --photo <path>` | Mark recognition as incorrect |
-| `claude-book add-match --person "Name" --photo <path>` | Manually add a missed recognition |
-| `claude-book status` | Show collection info and database stats |
-| `claude-book cleanup` | Remove AWS collection |
+| `openbook init` | Initialize config and AWS Rekognition collection |
+| `openbook train -r <path>` | Index faces from reference folders |
+| `openbook scan <path>` | Scan photos and create review albums |
+| `openbook scan <path> --dry-run` | Preview what albums would be created |
+| `openbook scan <path> --rescan` | Force re-scan of cached photos |
+| `openbook approve` | Approve review albums and create final albums |
+| `openbook approve --person "Name" --photo <path>` | Approve a specific recognition |
+| `openbook reject --person "Name" --photo <path>` | Mark recognition as incorrect |
+| `openbook add-match --person "Name" --photo <path>` | Manually add a missed recognition |
+| `openbook status` | Show collection info and database stats |
+| `openbook cleanup` | Remove AWS collection |
 
 ## Photo Memory
 
-Claude Book remembers every photo it scans using a local SQLite database (`.claude-book.db`).
+openbook remembers every photo it scans using a local SQLite database (`.openbook.db`).
 
 ### How It Works
 
@@ -68,7 +68,7 @@ Claude Book remembers every photo it scans using a local SQLite database (`.clau
 ### Scan Output Example
 
 ```
-$ claude-book scan ~/Photos
+$ openbook scan ~/Photos
 
 Scanning |████████████████| 100% | 1234/1234 | Matched: 89 | Cached: 892
 
@@ -89,7 +89,7 @@ When face recognition makes mistakes, teach it:
 If "Mom" was incorrectly detected in a photo:
 
 ```bash
-claude-book reject --person "Mom" --photo ~/Photos/vacation/IMG_001.jpg
+openbook reject --person "Mom" --photo ~/Photos/vacation/IMG_001.jpg
 ```
 
 Future scans will exclude this match.
@@ -99,7 +99,7 @@ Future scans will exclude this match.
 If "Dad" is in a photo but wasn't detected:
 
 ```bash
-claude-book add-match --person "Dad" --photo ~/Photos/vacation/IMG_002.jpg
+openbook add-match --person "Dad" --photo ~/Photos/vacation/IMG_002.jpg
 ```
 
 Future scans will include this match.
@@ -109,7 +109,7 @@ Future scans will include this match.
 To mark a match as verified correct:
 
 ```bash
-claude-book approve --person "Mom" --photo ~/Photos/vacation/IMG_003.jpg
+openbook approve --person "Mom" --photo ~/Photos/vacation/IMG_003.jpg
 ```
 
 ## Architecture
@@ -152,19 +152,19 @@ claude-book approve --person "Mom" --photo ~/Photos/vacation/IMG_003.jpg
 1. **Training Phase**
    ```
    Reference Photos → Detect Faces → Index to AWS Collection
-   ./references/mom/*.jpg → face vectors → "claude-book-faces" collection
+   ./references/mom/*.jpg → face vectors → "openbook-faces" collection
    ```
 
 2. **Scanning Phase**
    ```
    Photo Library → Hash → Cache Check → Match Against Collection → Apply Corrections → Create Albums
-   ~/Pictures/*.jpg → SHA256 → cached? → "mom: 94%" → not rejected? → "Claude Book: Mom" album
+   ~/Pictures/*.jpg → SHA256 → cached? → "mom: 94%" → not rejected? → "openbook: Mom" album
    ```
 
 ### Multi-Person Photos
 
 Photos with multiple recognized people are added to **all** matching albums:
-- Photo with Mom + Dad → added to both "Claude Book: Mom" AND "Claude Book: Dad"
+- Photo with Mom + Dad → added to both "openbook: Mom" AND "openbook: Dad"
 
 ## Tech Stack
 
@@ -197,7 +197,7 @@ aws:
   region: us-east-1
 
 rekognition:
-  collectionId: claude-book-faces
+  collectionId: openbook-faces
   minConfidence: 80              # Minimum match confidence (0-100)
 
 sources:
@@ -214,7 +214,7 @@ training:
   referencesPath: ./references
 
 albums:
-  prefix: "Claude Book"          # Albums: "Claude Book: Mom", "Claude Book: Dad"
+  prefix: "openbook"          # Albums: "openbook: Mom", "openbook: Dad"
 ```
 
 ### Environment Variables
@@ -252,12 +252,12 @@ references/
 
 ## Database Files
 
-Claude Book creates these files in your project directory:
+openbook creates these files in your project directory:
 
 | File | Purpose |
 |------|---------|
-| `.claude-book.db` | SQLite database with all scan data |
-| `.claude-book-review.json` | Temporary state for review workflow |
+| `.openbook.db` | SQLite database with all scan data |
+| `.openbook-review.json` | Temporary state for review workflow |
 | `config.yaml` | Your configuration |
 
 ### Database Contents
@@ -269,17 +269,17 @@ Claude Book creates these files in your project directory:
 
 ## iCloud Photos Integration
 
-iCloud Photos syncs to a local folder on macOS. Point claude-book at the Photos Library:
+iCloud Photos syncs to a local folder on macOS. Point openbook at the Photos Library:
 
 ```bash
 # Scan iCloud Photos library
-claude-book scan ~/Pictures/Photos\ Library.photoslibrary/originals
+openbook scan ~/Pictures/Photos\ Library.photoslibrary/originals
 ```
 
 Or export photos first for better results:
 1. Select photos in Apple Photos
 2. File → Export → Export Unmodified Originals
-3. `claude-book scan ~/exported-photos`
+3. `openbook scan ~/exported-photos`
 
 ## Telegram Integration
 
@@ -296,7 +296,7 @@ Family photos are often shared in Telegram groups:
 ### Step 2: Scan the Export
 
 ```bash
-claude-book scan ~/Downloads/TelegramExport/photos
+openbook scan ~/Downloads/TelegramExport/photos
 ```
 
 ## Prerequisites
@@ -311,7 +311,7 @@ claude-book scan ~/Downloads/TelegramExport/photos
 
 ## AWS Costs
 
-Claude Book uses AWS Rekognition, which is **not free** but is very affordable for personal use.
+openbook uses AWS Rekognition, which is **not free** but is very affordable for personal use.
 
 ### Pricing Overview (as of 2024)
 

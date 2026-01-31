@@ -1,4 +1,4 @@
-# Claude Book
+# openbook
 
 CLI tool for organizing family photos using face recognition with AWS Rekognition.
 
@@ -21,7 +21,7 @@ CLI tool for organizing family photos using face recognition with AWS Rekognitio
 
 ### Finding and Presenting Photos
 
-When the user asks to find, show, or review photos (e.g. "show me photos of Mom", "find photos from the last scan", "what photos are pending?"), use the `claude-book` CLI:
+When the user asks to find, show, or review photos (e.g. "show me photos of Mom", "find photos from the last scan", "what photos are pending?"), use the `openbook` CLI:
 
 1. **Find photos**: Run `bun run start photos` with appropriate filters:
    - `--person "Name"` to filter by person
@@ -39,7 +39,7 @@ When the user asks to find, show, or review photos (e.g. "show me photos of Mom"
 
 5. **Default to approved photos**: When showing photos, use `--status approved` by default. Only use `--status pending`, `--status rejected`, or `--status all` when the user explicitly asks for those statuses (e.g., "show pending photos", "show all photos", "include rejected").
 
-Always use `bun run start` (not `claude-book`) to invoke commands from this project directory.
+Always use `bun run start` (not `openbook`) to invoke commands from this project directory.
 
 ### Scanning for New Photos
 
@@ -88,76 +88,76 @@ bun run start <command>
 
 | Command | Description |
 |---------|-------------|
-| `claude-book init` | Initialize config and AWS Rekognition collection |
-| `claude-book status` | Show collection info and stats |
-| `claude-book stats` | Show classification accuracy metrics (per-person, by confidence) |
-| `claude-book clear [--yes]` | Clear all photos from database (keeps training data) |
+| `openbook init` | Initialize config and AWS Rekognition collection |
+| `openbook status` | Show collection info and stats |
+| `openbook stats` | Show classification accuracy metrics (per-person, by confidence) |
+| `openbook clear [--yes]` | Clear all photos from database (keeps training data) |
 
 ### Training Commands
 
 | Command | Description |
 |---------|-------------|
-| `claude-book train <path>` | Index faces from reference folders |
-| `claude-book train` | Use path from config.yaml |
-| `claude-book train --path <path>` | Override references folder path |
-| `claude-book train --person "Nina"` | Train only a specific person |
-| `claude-book train cleanup [--yes]` | Remove AWS Rekognition collection |
+| `openbook train <path>` | Index faces from reference folders |
+| `openbook train` | Use path from config.yaml |
+| `openbook train --path <path>` | Override references folder path |
+| `openbook train --person "Nina"` | Train only a specific person |
+| `openbook train cleanup [--yes]` | Remove AWS Rekognition collection |
 
 ### Persons Commands
 
 | Command | Description |
 |---------|-------------|
-| `claude-book persons` | List all persons with stats |
-| `claude-book persons --json` | Output as JSON |
-| `claude-book persons show <name>` | Show detailed info for a person |
-| `claude-book persons show <name> --json` | Output as JSON |
+| `openbook persons` | List all persons with stats |
+| `openbook persons --json` | Output as JSON |
+| `openbook persons show <name>` | Show detailed info for a person |
+| `openbook persons show <name> --json` | Output as JSON |
 
 ### Scan Commands
 
 | Command | Description |
 |---------|-------------|
-| `claude-book scan <path>` | Scan photos at path |
-| `claude-book scan --file <path...>` | Scan specific files by path |
-| `claude-book scan <path> --dry-run` | Preview without making changes |
-| `claude-book scan <path> --rescan` | Force re-scan of cached photos |
-| `claude-book scan <path> --exclude "thumb"` | Exclude files containing "thumb" in filename |
-| `claude-book scan <path> --person "Nina"` | Show only Nina's matches in post-scan report |
-| `claude-book scan list` | List recent scans with stats |
-| `claude-book scan show <id>` | Show details for a specific scan |
-| `claude-book scan clear` | Clear all scans and reset recognitions |
-| `claude-book scan clear --yes` | Clear without confirmation |
+| `openbook scan <path>` | Scan photos at path |
+| `openbook scan --file <path...>` | Scan specific files by path |
+| `openbook scan <path> --dry-run` | Preview without making changes |
+| `openbook scan <path> --rescan` | Force re-scan of cached photos |
+| `openbook scan <path> --exclude "thumb"` | Exclude files containing "thumb" in filename |
+| `openbook scan <path> --person "Nina"` | Show only Nina's matches in post-scan report |
+| `openbook scan list` | List recent scans with stats |
+| `openbook scan show <id>` | Show details for a specific scan |
+| `openbook scan clear` | Clear all scans and reset recognitions |
+| `openbook scan clear --yes` | Clear without confirmation |
 
 ### Photos Commands
 
 | Command | Description |
 |---------|-------------|
-| `claude-book photos` | List all scanned photos |
-| `claude-book photos --person all` | List photos with any recognition |
-| `claude-book photos --person "Mom"` | Filter by person |
-| `claude-book photos --status pending` | Filter by status |
-| `claude-book photos --scan 15` | Filter by scan ID |
-| `claude-book photos --open` | Open results in Preview |
-| `claude-book photos --json` | Output as JSON |
-| `claude-book photos --min-confidence 80` | Filter by confidence >= 80% |
-| `claude-book photos --max-confidence 70` | Filter by confidence <= 70% |
-| `claude-book photos --file "name"` | Filter by filename (substring match) |
-| `claude-book photos --after 2025-01-01` | Filter photos taken after date |
-| `claude-book photos --before 2025-06-30` | Filter photos taken before date |
-| `claude-book photos --page 2` | Show page 2 of results |
-| `claude-book photos --per-page 25` | Set results per page (default: 50) |
-| `claude-book photos approve <indexes>` | Approve by index (1,2,4-6) |
-| `claude-book photos approve --all` | Approve all in current list |
-| `claude-book photos approve --all --without 3,5` | Approve all except indexes |
-| `claude-book photos approve --all --min-confidence 90` | Approve high-confidence matches |
-| `claude-book photos approve --all --scan 45` | Approve all pending from scan |
-| `claude-book photos approve --person "Mom" --min-confidence 95` | Approve high-confidence for person |
-| `claude-book photos approve <person> <path>` | Approve specific photo |
-| `claude-book photos reject <indexes>` | Reject by index |
-| `claude-book photos reject --file "name.jpg"` | Reject by filename (must match 1 photo) |
-| `claude-book photos reject --all --max-confidence 60` | Reject low-confidence matches |
-| `claude-book photos add <person> <path>` | Manually add person to photo |
-| `claude-book photos export` | Export all approved to Apple Photos |
-| `claude-book photos export --person "Mom"` | Export for specific person |
+| `openbook photos` | List all scanned photos |
+| `openbook photos --person all` | List photos with any recognition |
+| `openbook photos --person "Mom"` | Filter by person |
+| `openbook photos --status pending` | Filter by status |
+| `openbook photos --scan 15` | Filter by scan ID |
+| `openbook photos --open` | Open results in Preview |
+| `openbook photos --json` | Output as JSON |
+| `openbook photos --min-confidence 80` | Filter by confidence >= 80% |
+| `openbook photos --max-confidence 70` | Filter by confidence <= 70% |
+| `openbook photos --file "name"` | Filter by filename (substring match) |
+| `openbook photos --after 2025-01-01` | Filter photos taken after date |
+| `openbook photos --before 2025-06-30` | Filter photos taken before date |
+| `openbook photos --page 2` | Show page 2 of results |
+| `openbook photos --per-page 25` | Set results per page (default: 50) |
+| `openbook photos approve <indexes>` | Approve by index (1,2,4-6) |
+| `openbook photos approve --all` | Approve all in current list |
+| `openbook photos approve --all --without 3,5` | Approve all except indexes |
+| `openbook photos approve --all --min-confidence 90` | Approve high-confidence matches |
+| `openbook photos approve --all --scan 45` | Approve all pending from scan |
+| `openbook photos approve --person "Mom" --min-confidence 95` | Approve high-confidence for person |
+| `openbook photos approve <person> <path>` | Approve specific photo |
+| `openbook photos reject <indexes>` | Reject by index |
+| `openbook photos reject --file "name.jpg"` | Reject by filename (must match 1 photo) |
+| `openbook photos reject --all --max-confidence 60` | Reject low-confidence matches |
+| `openbook photos add <person> <path>` | Manually add person to photo |
+| `openbook photos export` | Export all approved to Apple Photos |
+| `openbook photos export --person "Mom"` | Export for specific person |
 
 ### Photo Status Values
 
@@ -241,7 +241,7 @@ aws:
   region: us-east-1
 
 rekognition:
-  collectionId: claude-book-faces
+  collectionId: openbook-faces
   minConfidence: 80           # Match threshold (0-100)
   searchMethod: faces         # "faces" (individual) or "users" (aggregated vectors)
   rateLimit:
@@ -269,7 +269,7 @@ training:
   referencesPath: ./references
 
 albums:
-  prefix: "Claude Book"       # Album naming: "Claude Book: Mom"
+  prefix: "openbook"       # Album naming: "openbook: Mom"
 
 session:
   timeoutMinutes: 15          # Session cache validity
@@ -306,7 +306,7 @@ AWS_REGION=us-east-1
 
 ## Local Database
 
-File: `.claude-book.db` (SQLite, created automatically)
+File: `.openbook.db` (SQLite, created automatically)
 
 The database tracks:
 - **persons**: Known people from training (name, face count, photo count)
@@ -332,8 +332,8 @@ Three types of corrections:
 
 To validate training worked correctly:
 
-1. **Check status**: `claude-book status` - shows indexed face count and database stats
-2. **Test scan**: `claude-book scan ./test-photos --dry-run`
+1. **Check status**: `openbook status` - shows indexed face count and database stats
+2. **Test scan**: `openbook scan ./test-photos --dry-run`
 3. **Adjust confidence**: Lower `minConfidence` for more matches, higher for fewer false positives
 4. **Review corrections**: Use `photos reject` and `photos add` commands to improve accuracy
 
@@ -341,17 +341,17 @@ To validate training worked correctly:
 
 ```bash
 # 1. Scan new photos
-claude-book scan ~/Pictures/Recent
+openbook scan ~/Pictures/Recent
 
 # 2. Review pending photos from the scan
-claude-book photos --scan 15 --status pending --open
+openbook photos --scan 15 --status pending --open
 
 # 3. Approve all except wrong ones
-claude-book photos approve --all --without 3,7,12
+openbook photos approve --all --without 3,7,12
 
 # 4. Clean up low-confidence matches
-claude-book photos reject --max-confidence 60
+openbook photos reject --max-confidence 60
 
 # 5. Export approved to Apple Photos
-claude-book photos export
+openbook photos export
 ```

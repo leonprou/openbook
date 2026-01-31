@@ -1,17 +1,17 @@
-# Claude Book Command Manual
+# openbook Command Manual
 
 A CLI tool for organizing family photos using face recognition with AWS Rekognition.
 
 ## Quick Reference
 
 ```
-claude-book init                          Initialize project
-claude-book train <path>                  Train with reference photos
-claude-book persons                       List people and stats
-claude-book scan <path>                   Scan photos for faces
-claude-book photos                        List and manage recognized photos
-claude-book status                        Show stats
-claude-book cleanup                       Remove AWS collection
+openbook init                          Initialize project
+openbook train <path>                  Train with reference photos
+openbook persons                       List people and stats
+openbook scan <path>                   Scan photos for faces
+openbook photos                        List and manage recognized photos
+openbook status                        Show stats
+openbook cleanup                       Remove AWS collection
 ```
 
 ---
@@ -20,27 +20,27 @@ claude-book cleanup                       Remove AWS collection
 
 ### init
 
-Initialize Claude Book in the current directory.
+Initialize openbook in the current directory.
 
 ```
-claude-book init
+openbook init
 ```
 
 Creates:
 - `config.yaml` - Configuration file
-- `.claude-book.db` - SQLite database
+- `.openbook.db` - SQLite database
 - AWS Rekognition collection
 
 **Example:**
 ```bash
-$ claude-book init
+$ openbook init
 ✓ Created config.yaml
-✓ Created AWS Rekognition collection: claude-book-faces
+✓ Created AWS Rekognition collection: openbook-faces
 ✓ Initialized database
 
 Ready! Next steps:
   1. Add reference photos to ./references/<person>/
-  2. Run: claude-book train ./references
+  2. Run: openbook train ./references
 ```
 
 ---
@@ -50,7 +50,7 @@ Ready! Next steps:
 Index reference faces for recognition.
 
 ```
-claude-book train [path]
+openbook train [path]
 ```
 
 **Arguments:**
@@ -84,14 +84,14 @@ Each subfolder name becomes the person's identifier.
 **Examples:**
 ```bash
 # Train from default path
-$ claude-book train
+$ openbook train
 
 # Train from specific path
-$ claude-book train ./references
-$ claude-book train ~/Dropbox/family-faces
+$ openbook train ./references
+$ openbook train ~/Dropbox/family-faces
 
 # With verbose output
-$ claude-book train ./references --verbose
+$ openbook train ./references --verbose
 ```
 
 **Output:**
@@ -118,7 +118,7 @@ Training faces...
 Show reference photos used to train a person.
 
 ```
-claude-book train show <person> [options]
+openbook train show <person> [options]
 ```
 
 **Arguments:**
@@ -133,7 +133,7 @@ claude-book train show <person> [options]
 
 **Example:**
 ```bash
-$ claude-book train show mom
+$ openbook train show mom
 
 Reference photos for "mom":
   ~/references/mom/photo1.jpg
@@ -150,7 +150,7 @@ Reference photos for "mom":
 Remove AWS Rekognition collection (all trained face data).
 
 ```
-claude-book train cleanup [--yes]
+openbook train cleanup [--yes]
 ```
 
 **Options:**
@@ -160,10 +160,10 @@ claude-book train cleanup [--yes]
 
 **Example:**
 ```bash
-$ claude-book train cleanup
+$ openbook train cleanup
 
 This will delete the AWS Rekognition collection:
-  Collection: claude-book-faces
+  Collection: openbook-faces
 
 All indexed faces will be permanently deleted.
 
@@ -171,8 +171,8 @@ Are you sure you want to continue? [y/N] y
 ✓ Collection deleted successfully
 
 To start fresh, run:
-  claude-book init
-  claude-book train -r ./references
+  openbook init
+  openbook train -r ./references
 ```
 
 ---
@@ -182,7 +182,7 @@ To start fresh, run:
 List all trained people and their recognition stats.
 
 ```
-claude-book persons [options]
+openbook persons [options]
 ```
 
 **Options:**
@@ -194,7 +194,7 @@ claude-book persons [options]
 
 **Example:**
 ```bash
-$ claude-book persons
+$ openbook persons
 
 People:
 ──────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ Nina         6      0       -           2025-01-20
 Show detailed info for a specific person.
 
 ```
-claude-book persons show <name> [options]
+openbook persons show <name> [options]
 ```
 
 **Arguments:**
@@ -234,7 +234,7 @@ claude-book persons show <name> [options]
 
 **Example:**
 ```bash
-$ claude-book persons show Ada
+$ openbook persons show Ada
 
 Person: Ada
 
@@ -264,7 +264,7 @@ Recent Matches:
 Scan photos to find and match faces.
 
 ```
-claude-book scan [path] [options]
+openbook scan [path] [options]
 ```
 
 **Arguments:**
@@ -290,14 +290,14 @@ claude-book scan [path] [options]
 **Examples:**
 ```bash
 # Scan a folder
-$ claude-book scan ~/Pictures/Family
-$ claude-book scan ~/Pictures/Vacation --dry-run
+$ openbook scan ~/Pictures/Family
+$ openbook scan ~/Pictures/Vacation --dry-run
 
 # Scan specific files
-$ claude-book scan --file ~/Pictures/photo1.jpg ~/Pictures/photo2.heic
+$ openbook scan --file ~/Pictures/photo1.jpg ~/Pictures/photo2.heic
 
 # Force rescan (ignore cache)
-$ claude-book scan ~/Pictures --rescan
+$ openbook scan ~/Pictures --rescan
 ```
 
 **Output:**
@@ -322,13 +322,13 @@ Found Photos:
 ...
 
 Showing 50 of 89 photos.
-Use 'claude-book photos --scan 15' for full list.
+Use 'openbook photos --scan 15' for full list.
 
 Next steps:
-  claude-book photos --scan 15           Review photos from this scan
-  claude-book photos approve <indexes>   Approve correct matches
-  claude-book photos reject <indexes>    Reject false positives
-  claude-book photos export              Create albums for approved photos
+  openbook photos --scan 15           Review photos from this scan
+  openbook photos approve <indexes>   Approve correct matches
+  openbook photos reject <indexes>    Reject false positives
+  openbook photos export              Create albums for approved photos
 ```
 
 ---
@@ -338,7 +338,7 @@ Next steps:
 Show scan history.
 
 ```
-claude-book scan list [options]
+openbook scan list [options]
 ```
 
 **Options:**
@@ -349,7 +349,7 @@ claude-book scan list [options]
 
 **Example:**
 ```bash
-$ claude-book scan list
+$ openbook scan list
 
 ID   Date                 Photos   Matches  New    Source
 15   2024-01-15 14:30    234      89       42     ~/Pictures/Family
@@ -365,7 +365,7 @@ ID   Date                 Photos   Matches  New    Source
 Show details for a specific scan.
 
 ```
-claude-book scan show <id>
+openbook scan show <id>
 ```
 
 **Arguments:**
@@ -375,7 +375,7 @@ claude-book scan show <id>
 
 **Example:**
 ```bash
-$ claude-book scan show 15
+$ openbook scan show 15
 
 Scan #15
 ────────────────────────────────
@@ -405,7 +405,7 @@ Status:
 List scanned photos with optional filters.
 
 ```
-claude-book photos [options]
+openbook photos [options]
 ```
 
 **Options:**
@@ -441,41 +441,41 @@ claude-book photos [options]
 **Examples:**
 ```bash
 # List all scanned photos
-$ claude-book photos
+$ openbook photos
 
 # List only photos with recognitions
-$ claude-book photos --person all
+$ openbook photos --person all
 
 # List photos for specific person
-$ claude-book photos --person "Mom"
+$ openbook photos --person "Mom"
 
 # List approved photos only
-$ claude-book photos --status approved
+$ openbook photos --status approved
 
 # List photos from a specific scan
-$ claude-book photos --scan 15
+$ openbook photos --scan 15
 
 # Combine filters
-$ claude-book photos --person "Mom" --status pending --scan 15
+$ openbook photos --person "Mom" --status pending --scan 15
 
 # Open in Preview for visual review
-$ claude-book photos --person "Mom" --open
+$ openbook photos --person "Mom" --open
 
 # Filter by date range
-$ claude-book photos --person "Mom" --after 2025-01-01
-$ claude-book photos --after 2025-06-01 --before 2025-08-31
+$ openbook photos --person "Mom" --after 2025-01-01
+$ openbook photos --after 2025-06-01 --before 2025-08-31
 
 # Paginate through results
-$ claude-book photos --page 2
-$ claude-book photos --page 3 --per-page 25
+$ openbook photos --page 2
+$ openbook photos --page 3 --per-page 25
 
 # JSON output for scripting
-$ claude-book photos --json
+$ openbook photos --json
 ```
 
 **Output:**
 ```
-$ claude-book photos --person "Mom"
+$ openbook photos --person "Mom"
 
  #   Status    Confidence  Path
  1   pending   94.2%       ~/Pictures/vacation/IMG_001.jpg
@@ -494,9 +494,9 @@ Showing 5 of 45 photos (Mom, pending)
 Mark photos as correctly recognized.
 
 ```
-claude-book photos approve <indexes>
-claude-book photos approve --all [--without <indexes>]
-claude-book photos approve <person> <path>
+openbook photos approve <indexes>
+openbook photos approve --all [--without <indexes>]
+openbook photos approve <person> <path>
 ```
 
 **Arguments:**
@@ -519,7 +519,7 @@ claude-book photos approve <person> <path>
 **Examples:**
 ```bash
 # First, list and review photos from a scan
-$ claude-book photos --scan 15 --status pending --open
+$ openbook photos --scan 15 --status pending --open
 
  #   Person   Confidence  Path
  1   Mom      94.2%       ~/Pictures/IMG_001.jpg
@@ -529,22 +529,22 @@ $ claude-book photos --scan 15 --status pending --open
  5   Dad      52.1%       ~/Pictures/IMG_005.jpg  ← wrong
 
 # Approve all except wrong ones
-$ claude-book photos approve --all --without 3,5
+$ openbook photos approve --all --without 3,5
 ✓ Approved 3 photos (skipped 2)
 
 # Or approve specific indexes
-$ claude-book photos approve 1,2,4
+$ openbook photos approve 1,2,4
 
 # Approve by person and path (no prior list needed)
-$ claude-book photos approve "Mom" ~/Pictures/photo.jpg
+$ openbook photos approve "Mom" ~/Pictures/photo.jpg
 
 # Preview what would be approved
-$ claude-book photos approve --all --dry-run
+$ openbook photos approve --all --dry-run
 ```
 
 **Output:**
 ```
-$ claude-book photos approve --all --without 3,5
+$ openbook photos approve --all --without 3,5
 
 ✓ Approved 3 photos (skipped 2)
   Mom:  ~/Pictures/IMG_001.jpg
@@ -559,11 +559,11 @@ $ claude-book photos approve --all --without 3,5
 Mark photos as incorrectly recognized (false positives).
 
 ```
-claude-book photos reject <indexes>
-claude-book photos reject --file <filename>
-claude-book photos reject --all [--without <indexes>]
-claude-book photos reject --max-confidence <n> [--person <name>]
-claude-book photos reject <person> <path>
+openbook photos reject <indexes>
+openbook photos reject --file <filename>
+openbook photos reject --all [--without <indexes>]
+openbook photos reject --max-confidence <n> [--person <name>]
+openbook photos reject <person> <path>
 ```
 
 **Arguments:**
@@ -586,34 +586,34 @@ claude-book photos reject <person> <path>
 **Examples:**
 ```bash
 # Reject specific indexes
-$ claude-book photos reject 3,5
+$ openbook photos reject 3,5
 
 # Reject by filename (from last photos list)
-$ claude-book photos reject --file "photo_24971@06-06-2025.jpg"
+$ openbook photos reject --file "photo_24971@06-06-2025.jpg"
 
 # Reject all in list except good ones
-$ claude-book photos reject --all --without 1,2,4
+$ openbook photos reject --all --without 1,2,4
 
 # Bulk reject low-confidence matches (safe cleanup)
-$ claude-book photos reject --max-confidence 60
+$ openbook photos reject --max-confidence 60
 ⚠ This will reject 23 photos with confidence ≤ 60%
 Continue? [y/N] y
 ✓ Rejected 23 photos
 
 # Reject low-confidence for specific person
-$ claude-book photos reject --max-confidence 70 --person "Mom"
+$ openbook photos reject --max-confidence 70 --person "Mom"
 ✓ Rejected 8 photos for Mom
 
 # Preview what would be rejected
-$ claude-book photos reject --max-confidence 60 --dry-run
+$ openbook photos reject --max-confidence 60 --dry-run
 
 # Reject by person and path (no prior list needed)
-$ claude-book photos reject "Mom" ~/Pictures/wrong_match.jpg
+$ openbook photos reject "Mom" ~/Pictures/wrong_match.jpg
 ```
 
 **Output:**
 ```
-$ claude-book photos reject 3
+$ openbook photos reject 3
 
 ✓ Rejected 1 photo for Mom
   ~/Pictures/party/IMG_100.jpg
@@ -628,7 +628,7 @@ This photo will be excluded from future Mom albums.
 Manually add a recognition (for missed detections).
 
 ```
-claude-book photos add <person> <path>
+openbook photos add <person> <path>
 ```
 
 **Arguments:**
@@ -640,7 +640,7 @@ claude-book photos add <person> <path>
 **Example:**
 ```bash
 # Add Dad to a photo where he wasn't detected
-$ claude-book photos add "Dad" ~/Pictures/family_dinner.jpg
+$ openbook photos add "Dad" ~/Pictures/family_dinner.jpg
 
 ✓ Added Dad to ~/Pictures/family_dinner.jpg
 ```
@@ -654,7 +654,7 @@ Use this when face recognition missed someone in a photo.
 Export photos to Apple Photos albums.
 
 ```
-claude-book photos export [options]
+openbook photos export [options]
 ```
 
 **Options:**
@@ -668,36 +668,36 @@ claude-book photos export [options]
 **Examples:**
 ```bash
 # Export all approved photos (one album per person)
-$ claude-book photos export
+$ openbook photos export
 
 # Export for specific person
-$ claude-book photos export --person "Mom"
+$ openbook photos export --person "Mom"
 
 # Custom album name
-$ claude-book photos export --person "Mom" --album "Mom - 2024 Vacation"
+$ openbook photos export --person "Mom" --album "Mom - 2024 Vacation"
 
 # Include pending photos
-$ claude-book photos export --person "Mom" --status all
+$ openbook photos export --person "Mom" --status all
 
 # Preview what would be created
-$ claude-book photos export --dry-run
+$ openbook photos export --dry-run
 ```
 
 **Output:**
 ```
-$ claude-book photos export
+$ openbook photos export
 
 Exporting to Apple Photos...
 
-  Creating album: Claude Book: Mom
+  Creating album: openbook: Mom
   Adding 45 photos...
   ✓ Done
 
-  Creating album: Claude Book: Dad
+  Creating album: openbook: Dad
   Adding 38 photos...
   ✓ Done
 
-  Creating album: Claude Book: Sister
+  Creating album: openbook: Sister
   Adding 6 photos...
   ✓ Done
 
@@ -711,17 +711,17 @@ Exporting to Apple Photos...
 Show collection information and statistics.
 
 ```
-claude-book status
+openbook status
 ```
 
 **Example:**
 ```bash
-$ claude-book status
+$ openbook status
 
-Claude Book Status
+openbook Status
 ──────────────────────────────────
 
-AWS Collection: claude-book-faces
+AWS Collection: openbook-faces
   Region:     us-east-1
   Faces:      7 indexed
 
@@ -747,7 +747,7 @@ Last scan:   2024-01-15 14:30 (Scan #15)
 Clear all photos from the database while keeping training data.
 
 ```
-claude-book clear [--yes]
+openbook clear [--yes]
 ```
 
 **Options:**
@@ -766,7 +766,7 @@ claude-book clear [--yes]
 
 **Example:**
 ```bash
-$ claude-book clear
+$ openbook clear
 
 This will delete all photos and scans from the database.
 Training data (persons) will be preserved.
@@ -783,7 +783,7 @@ Cleared 1892 photo(s) and 15 scan(s).
 
 ```bash
 # 1. Initialize
-claude-book init
+openbook init
 
 # 2. Create reference folders
 mkdir -p references/mom references/dad references/kids
@@ -793,65 +793,65 @@ cp ~/clear-photos/mom*.jpg references/mom/
 cp ~/clear-photos/dad*.jpg references/dad/
 
 # 4. Train the model
-claude-book train ./references
+openbook train ./references
 
 # 5. Verify training worked
-claude-book status
+openbook status
 ```
 
 ### Daily Photo Review
 
 ```bash
 # 1. Scan new photos
-claude-book scan ~/Pictures/Recent
+openbook scan ~/Pictures/Recent
 
 # 2. Review photos from scan
-claude-book photos --scan 15 --status pending --open
+openbook photos --scan 15 --status pending --open
 
 # 3. Approve all except wrong ones
-claude-book photos approve --all --without 3,7,12
+openbook photos approve --all --without 3,7,12
 
 # 4. Export to Apple Photos
-claude-book photos export
+openbook photos export
 ```
 
 ### Bulk Approval with Exceptions
 
 ```bash
 # List and view all pending from a scan
-claude-book photos --scan 15 --status pending --open
+openbook photos --scan 15 --status pending --open
 
 # Review visually, note the wrong ones, approve rest
-claude-book photos approve --all --without 5,8,14
+openbook photos approve --all --without 5,8,14
 
 # Reject the wrong ones explicitly
-claude-book photos reject 5,8,14
+openbook photos reject 5,8,14
 ```
 
 ### Clean Up Low-Confidence Matches
 
 ```bash
 # Preview what would be rejected
-claude-book photos reject --max-confidence 60 --dry-run
+openbook photos reject --max-confidence 60 --dry-run
 
 # Reject all low-confidence matches
-claude-book photos reject --max-confidence 60
+openbook photos reject --max-confidence 60
 
 # Or just for one person
-claude-book photos reject --max-confidence 70 --person "Mom"
+openbook photos reject --max-confidence 70 --person "Mom"
 ```
 
 ### Quick Scan Review
 
 ```bash
 # View pending photos from latest scan
-claude-book photos --scan 15 --status pending --open
+openbook photos --scan 15 --status pending --open
 
 # If all look correct, approve everything
-claude-book photos approve --all
+openbook photos approve --all
 
 # Or approve with a few exceptions
-claude-book photos approve --all --without 3,7
+openbook photos approve --all --without 3,7
 ```
 
 ### Re-scanning After Corrections
@@ -860,26 +860,26 @@ After rejecting false positives or adding missed recognitions:
 
 ```bash
 # Normal scan uses cache and applies corrections
-claude-book scan ~/Pictures
+openbook scan ~/Pictures
 
 # Force complete rescan if needed
-claude-book scan ~/Pictures --rescan
+openbook scan ~/Pictures --rescan
 ```
 
 ### Scripting & Automation
 
 ```bash
 # Get pending counts as JSON
-claude-book photos --status pending --json | jq 'group_by(.person) | map({person: .[0].person, count: length})'
+openbook photos --status pending --json | jq 'group_by(.person) | map({person: .[0].person, count: length})'
 
 # Export specific scan results to CSV
-claude-book photos --scan 15 --json | jq -r '[.path, .person, .confidence] | @csv' > scan15.csv
+openbook photos --scan 15 --json | jq -r '[.path, .person, .confidence] | @csv' > scan15.csv
 
 # Find low-confidence matches to review
-claude-book photos --status pending --json | jq -r 'select(.confidence < 70) | "\(.confidence)% \(.person) \(.path)"'
+openbook photos --status pending --json | jq -r 'select(.confidence < 70) | "\(.confidence)% \(.person) \(.path)"'
 
 # Bulk reject low-confidence (with confirmation)
-claude-book photos reject --max-confidence 60
+openbook photos reject --max-confidence 60
 ```
 
 ---
@@ -893,7 +893,7 @@ aws:
   region: us-east-1                    # AWS region
 
 rekognition:
-  collectionId: claude-book-faces      # Collection name
+  collectionId: openbook-faces      # Collection name
   minConfidence: 80                    # Match threshold (0-100)
 
 sources:
@@ -911,7 +911,7 @@ training:
   referencesPath: ./references         # Reference photos location
 
 albums:
-  prefix: "Claude Book"                # Album prefix in Apple Photos
+  prefix: "openbook"                # Album prefix in Apple Photos
 ```
 
 ### Environment Variables
@@ -956,8 +956,8 @@ Then use `photos reject` to fix any mistakes.
 | File | Purpose |
 |------|---------|
 | `config.yaml` | Your configuration |
-| `.claude-book.db` | SQLite database (scans, matches, corrections) |
-| `.claude-book-session.json` | Temporary session state (gitignored) |
+| `.openbook.db` | SQLite database (scans, matches, corrections) |
+| `.openbook-session.json` | Temporary session state (gitignored) |
 
 ---
 
@@ -984,7 +984,7 @@ aws configure
 
 The photo hasn't been scanned yet. Run:
 ```bash
-claude-book scan /path/to/photo/folder
+openbook scan /path/to/photo/folder
 ```
 
 ### Slow scanning performance

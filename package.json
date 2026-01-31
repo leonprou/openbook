@@ -1,16 +1,16 @@
 {
-  "name": "claude-book",
+  "name": "openbook",
   "version": "0.1.0",
   "description": "CLI tool for organizing family photos using face recognition",
   "author": "leonprou",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/leonprou/claude-book"
+    "url": "https://github.com/leonprou/openbook"
   },
   "type": "module",
   "bin": {
-    "claude-book": "./src/index.ts"
+    "openbook": "./src/index.ts"
   },
   "scripts": {
     "start": "bun run src/index.ts",

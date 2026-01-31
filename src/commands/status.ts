@@ -19,7 +19,7 @@ export async function statusCommand(): Promise<void> {
   if (existsSync(configPath)) {
     console.log(`  ✓ Config file: ${configPath}`);
   } else {
-    console.log(`  ✗ Config file not found (run 'claude-book init')`);
+    console.log(`  ✗ Config file not found (run 'openbook init')`);
     return;
   }
 
@@ -66,7 +66,7 @@ export async function statusCommand(): Promise<void> {
       }
     } else {
       spinner.stop();
-      console.log(`  ✗ Collection not found (run 'claude-book init')`);
+      console.log(`  ✗ Collection not found (run 'openbook init')`);
     }
   } catch (error: any) {
     spinner.fail(`Failed to check collection: ${error.message}`);
@@ -127,7 +127,7 @@ export async function statusCommand(): Promise<void> {
       console.log(`    Cached files: ${dirCache.files.toLocaleString()}`);
     }
   } catch {
-    console.log(`  ○ Database not initialized (run 'claude-book scan' first)`);
+    console.log(`  ○ Database not initialized (run 'openbook scan' first)`);
   }
 
   // Show config summary

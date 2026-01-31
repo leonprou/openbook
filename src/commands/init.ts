@@ -48,6 +48,6 @@ export async function initCommand(): Promise<void> {
   console.log(
     "1. Add reference photos to ./references/<person_name>/ folders"
   );
-  console.log("2. Run: claude-book train");
-  console.log("3. Run: claude-book scan -p ~/Pictures/Family");
+  console.log("2. Run: openbook train");
+  console.log("3. Run: openbook scan -p ~/Pictures/Family");
 }

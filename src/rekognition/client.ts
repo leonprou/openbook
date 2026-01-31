@@ -565,7 +565,7 @@ export class FaceRecognitionClient {
   }
 
   private convertHeicWithSips(imagePath: string): Buffer {
-    const tempPath = join(tmpdir(), `claude-book-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+    const tempPath = join(tmpdir(), `openbook-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
     try {
       execSync(`sips -s format jpeg "${imagePath}" --out "${tempPath}"`, { stdio: "pipe" });
       return readFileSync(tempPath);

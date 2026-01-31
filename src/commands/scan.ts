@@ -139,7 +139,7 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   const collectionInfo = await client.getCollectionInfo();
   if (!collectionInfo || collectionInfo.faceCount === 0) {
-    spinner.fail("No faces indexed. Run 'claude-book train' first.");
+    spinner.fail("No faces indexed. Run 'openbook train' first.");
     process.exit(1);
   }
 
@@ -483,14 +483,14 @@ export async function scanCommand(options: ScanOptions): Promise<void> {
 
   if (allMatches.length > TABLE_LIMIT) {
     console.log(`\nShowing ${TABLE_LIMIT} of ${allMatches.length} photos.`);
-    console.log(`Use 'claude-book photos --scan ${scanId}' for full list.`);
+    console.log(`Use 'openbook photos --scan ${scanId}' for full list.`);
   }
 
   console.log("\nNext steps:");
-  console.log(`  claude-book photos --scan ${scanId}           Review photos from this scan`);
-  console.log("  claude-book photos approve <indexes>      Approve correct matches");
-  console.log("  claude-book photos reject <indexes>       Reject false positives");
-  console.log("  claude-book photos export                 Create albums for approved photos");
+  console.log(`  openbook photos --scan ${scanId}           Review photos from this scan`);
+  console.log("  openbook photos approve <indexes>      Approve correct matches");
+  console.log("  openbook photos reject <indexes>       Reject false positives");
+  console.log("  openbook photos export                 Create albums for approved photos");
 
   if (options.report) {
     console.log("\n--- Scan Report ---");
@@ -519,7 +519,7 @@ export async function scanListHistoryCommand(options: ScanListHistoryOptions = {
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan' first.");
+    console.log("Database not initialized. Run 'openbook scan' first.");
     return;
   }
 
@@ -527,7 +527,7 @@ export async function scanListHistoryCommand(options: ScanListHistoryOptions = {
   const scans = getRecentScans(limit);
 
   if (scans.length === 0) {
-    console.log("No scans found. Run 'claude-book scan <path>' first.");
+    console.log("No scans found. Run 'openbook scan <path>' first.");
     return;
   }
 
@@ -569,8 +569,8 @@ export async function scanListHistoryCommand(options: ScanListHistoryOptions = {
   }
 
   console.log();
-  console.log("Use 'claude-book scan show <id>' to view scan details.");
-  console.log("Use 'claude-book photos --scan <id>' to manage photos from a scan.");
+  console.log("Use 'openbook scan show <id>' to view scan details.");
+  console.log("Use 'openbook photos --scan <id>' to manage photos from a scan.");
 }
 
 interface ScanShowOptions {
@@ -585,7 +585,7 @@ export async function scanShowCommand(scanId: string, options: ScanShowOptions =
   try {
     initDatabase();
   } catch {
-    console.log("Database not initialized. Run 'claude-book scan' first.");
+    console.log("Database not initialized. Run 'openbook scan' first.");
     return;
   }
 
@@ -656,7 +656,7 @@ export async function scanShowCommand(scanId: string, options: ScanShowOptions =
   }
 
   console.log();
-  console.log("Use 'claude-book photos --scan " + scan.id + "' to manage these photos.");
+  console.log("Use 'openbook photos --scan " + scan.id + "' to manage these photos.");
 }
 
 interface ScanClearOptions {

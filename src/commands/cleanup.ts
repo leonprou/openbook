@@ -32,8 +32,8 @@ export async function cleanupCommand(options: CleanupOptions): Promise<void> {
     spinner.succeed("Collection deleted successfully");
 
     console.log("\nTo start fresh, run:");
-    console.log("  claude-book init");
-    console.log("  claude-book train -r ./references");
+    console.log("  openbook init");
+    console.log("  openbook train -r ./references");
   } catch (error: any) {
     spinner.fail(`Failed to delete collection: ${error.message}`);
     process.exit(1);

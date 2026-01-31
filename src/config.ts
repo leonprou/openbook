@@ -10,7 +10,7 @@ const configSchema = z.object({
   }),
   rekognition: z
     .object({
-      collectionId: z.string().default("claude-book-faces"),
+      collectionId: z.string().default("openbook-faces"),
       minConfidence: z.number().min(0).max(100).default(80),
       searchMethod: z.enum(["faces", "users", "compare"]).default("faces"),
       rateLimit: z
@@ -54,7 +54,7 @@ const configSchema = z.object({
     referencesPath: z.string().default("./references"),
   }),
   albums: z.object({
-    prefix: z.string().default("Claude Book"),
+    prefix: z.string().default("openbook"),
   }),
   session: z
     .object({
@@ -128,13 +128,13 @@ export function loadConfig(): Config {
 }
 
 export function getDefaultConfig(): string {
-  return `# Claude Book Configuration
+  return `# openbook Configuration
 
 aws:
   region: us-east-1
 
 rekognition:
-  collectionId: claude-book-faces
+  collectionId: openbook-faces
   minConfidence: 80
   searchMethod: faces       # "faces" (individual vectors) or "users" (aggregated vectors)
   rateLimit:
@@ -167,7 +167,7 @@ training:
   referencesPath: ./references
 
 albums:
-  prefix: "Claude Book"  # Albums: "Claude Book: Mom", "Claude Book: Dad"
+  prefix: "openbook"  # Albums: "openbook: Mom", "openbook: Dad"
 
 session:
   timeoutMinutes: 15        # Session cache validity

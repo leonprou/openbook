@@ -1,6 +1,6 @@
-# Contributing to Claude Book
+# Contributing to openbook
 
-Thank you for your interest in contributing to Claude Book! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to openbook! This document provides guidelines for contributing to the project.
 
 ## Getting Started
 
@@ -157,6 +157,6 @@ Please note that this project follows a Code of Conduct (see CODE_OF_CONDUCT.md)
 
 ## License
 
-By contributing to Claude Book, you agree that your contributions will be licensed under the MIT License.
+By contributing to openbook, you agree that your contributions will be licensed under the MIT License.
 
 Thank you for contributing!

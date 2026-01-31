@@ -18,7 +18,7 @@ export async function personsListCommand(options: PersonsListOptions): Promise<v
   const persons = getAllPersons();
 
   if (persons.length === 0) {
-    console.log("No persons found. Run 'claude-book train' first.");
+    console.log("No persons found. Run 'openbook train' first.");
     return;
   }
 

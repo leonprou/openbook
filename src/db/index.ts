@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { basename, resolve } from "path";
 import { getPhotoDateISO } from "../utils/date";
 
-const DB_FILE = ".claude-book.db";
+const DB_FILE = ".openbook.db";
 
 export interface Person {
   id: number;

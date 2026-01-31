@@ -22,7 +22,7 @@ export async function trainCommand(
   // Deprecation warning for old syntax
   if (options.references) {
     console.warn("Warning: -r/--references is deprecated. Use positional argument instead:");
-    console.warn("  claude-book train <path>");
+    console.warn("  openbook train <path>");
     console.warn("");
   }
 

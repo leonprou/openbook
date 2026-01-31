@@ -1,11 +1,11 @@
-# Claude Book Configuration Example
+# openbook Configuration Example
 # Copy this file to config.yaml and customize for your setup
 
 aws:
   region: us-east-1
 
 rekognition:
-  collectionId: claude-book-faces
+  collectionId: openbook-faces
   minConfidence: 80           # Match threshold (0-100)
   searchMethod: faces         # "faces" (individual) or "users" (aggregated vectors) or "compare" (direct comparison)
   rateLimit:
@@ -38,7 +38,7 @@ training:
   referencesPath: ./references  # Path to reference photos for training
 
 albums:
-  prefix: "Claude Book"       # Album naming: "Claude Book: Mom"
+  prefix: "openbook"       # Album naming: "openbook: Mom"
 
 session:
   timeoutMinutes: 15          # Session cache validity
