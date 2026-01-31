@@ -6,6 +6,7 @@ CLI tool for organizing family photos using face recognition with AWS Rekognitio
 
 | File | Purpose |
 |------|---------|
+| `SKILL.md` | Claude skill for helping users interact with openbook |
 | `docs/Architecture.md` | System architecture, data models, core processes, caching strategy |
 | `docs/MANUAL.md` | Comprehensive CLI command reference |
 | `README.md` | User-facing quick start and overview |
@@ -15,57 +16,10 @@ CLI tool for organizing family photos using face recognition with AWS Rekognitio
 1. **Before planning**: Read `docs/Architecture.md` to understand system design and data flows
 2. **Before training**: Always ask the user for explicit approval before running `bun run start train`. Never run training automatically.
 3. **Before committing**: Update relevant documentation if changes affect:
-   - CLI commands or options → update `CLAUDE.md` and `docs/MANUAL.md`
+   - CLI commands or options → update `SKILL.md` and `docs/MANUAL.md`
    - Architecture or data models → update `docs/Architecture.md`
    - User-facing features → update `README.md`
-
-### Finding and Presenting Photos
-
-When the user asks to find, show, or review photos (e.g. "show me photos of Mom", "find photos from the last scan", "what photos are pending?"), use the `openbook` CLI:
-
-1. **Find photos**: Run `bun run start photos` with appropriate filters:
-   - `--person "Name"` to filter by person
-   - `--status pending|approved|rejected|manual|all` to filter by review status
-   - `--scan <id>` to filter by scan run
-   - `--min-confidence N` / `--max-confidence N` to filter by recognition confidence
-   - `--after YYYY-MM-DD` / `--before YYYY-MM-DD` to filter by photo capture date
-   - `--json` for structured output you can parse and summarize
-
-2. **Present results**: Summarize the output for the user — show counts, list file paths, and highlight key details (person, confidence, status). When the user asks to "show" photos, always include `--open` to open them in Preview automatically.
-
-3. **Take action**: If the user wants to approve, reject, or add recognitions based on what they see, use the corresponding subcommands (`photos approve`, `photos reject`, `photos add`).
-
-4. **Scan new photos**: If the user asks to scan a folder, run `bun run start scan <path>` and report the results.
-
-5. **Default to approved photos**: When showing photos, use `--status approved` by default. Only use `--status pending`, `--status rejected`, or `--status all` when the user explicitly asks for those statuses (e.g., "show pending photos", "show all photos", "include rejected").
-
-Always use `bun run start` (not `openbook`) to invoke commands from this project directory.
-
-### Scanning for New Photos
-
-The scan command uses **directory caching** — it tracks each directory's modification time and skips unchanged directories entirely (no file enumeration or hashing needed). Repeated scans are fast automatically.
-
-When the user asks to scan for new photos (e.g., "look for new Nina photos", "scan recent photos"):
-
-1. **Path is required**: If the user doesn't specify a folder path, ask them which folder to scan. Suggest relevant options:
-   - Subfolders within common locations (list them with `ls`)
-   - Any paths from previous scans (check with `bun run start scan list`)
-   - **Never scan root-level folders** like `~/Pictures`, `~/Downloads`, or `~/Desktop` directly — always ask the user to pick a specific subfolder
-   - **Never scan source folders** from `config.yaml` → `sources.local.paths` — these are aggregation folders that likely contain photos from many different sources and are too broad to scan directly. Always ask the user to pick a specific subfolder within them instead.
-2. **Just run the scan**: Directory caching makes repeated scans fast — only new/changed directories are processed
-3. **Person-specific**: Use `--person "Name"` to filter the post-scan report to that person
-4. **Safety limit**: For first-time scans on large libraries, add `--limit 500` as a safety net
-5. **Force full rescan**: Use `--rescan` to bypass directory caching if needed
-
-Example scan:
-```bash
-bun run start scan ~/Pictures/Family --person "Nina"
-```
-
-For first-time scans on large libraries:
-```bash
-bun run start scan ~/Pictures/Family --limit 500 --person "Nina"
-```
+4. **For user interactions**: See `SKILL.md` for workflows on finding photos, scanning, approving/rejecting matches, and other user tasks
 
 ## Quick Reference
 
@@ -82,92 +36,7 @@ bun run src/index.ts <command>
 bun run start <command>
 ```
 
-## CLI Commands
-
-### Setup Commands
-
-| Command | Description |
-|---------|-------------|
-| `openbook init` | Initialize config and AWS Rekognition collection |
-| `openbook status` | Show collection info and stats |
-| `openbook stats` | Show classification accuracy metrics (per-person, by confidence) |
-| `openbook clear [--yes]` | Clear all photos from database (keeps training data) |
-
-### Training Commands
-
-| Command | Description |
-|---------|-------------|
-| `openbook train <path>` | Index faces from reference folders |
-| `openbook train` | Use path from config.yaml |
-| `openbook train --path <path>` | Override references folder path |
-| `openbook train --person "Nina"` | Train only a specific person |
-| `openbook train cleanup [--yes]` | Remove AWS Rekognition collection |
-
-### Persons Commands
-
-| Command | Description |
-|---------|-------------|
-| `openbook persons` | List all persons with stats |
-| `openbook persons --json` | Output as JSON |
-| `openbook persons show <name>` | Show detailed info for a person |
-| `openbook persons show <name> --json` | Output as JSON |
-
-### Scan Commands
-
-| Command | Description |
-|---------|-------------|
-| `openbook scan <path>` | Scan photos at path |
-| `openbook scan --file <path...>` | Scan specific files by path |
-| `openbook scan <path> --dry-run` | Preview without making changes |
-| `openbook scan <path> --rescan` | Force re-scan of cached photos |
-| `openbook scan <path> --exclude "thumb"` | Exclude files containing "thumb" in filename |
-| `openbook scan <path> --person "Nina"` | Show only Nina's matches in post-scan report |
-| `openbook scan list` | List recent scans with stats |
-| `openbook scan show <id>` | Show details for a specific scan |
-| `openbook scan clear` | Clear all scans and reset recognitions |
-| `openbook scan clear --yes` | Clear without confirmation |
-
-### Photos Commands
-
-| Command | Description |
-|---------|-------------|
-| `openbook photos` | List all scanned photos |
-| `openbook photos --person all` | List photos with any recognition |
-| `openbook photos --person "Mom"` | Filter by person |
-| `openbook photos --status pending` | Filter by status |
-| `openbook photos --scan 15` | Filter by scan ID |
-| `openbook photos --open` | Open results in Preview |
-| `openbook photos --json` | Output as JSON |
-| `openbook photos --min-confidence 80` | Filter by confidence >= 80% |
-| `openbook photos --max-confidence 70` | Filter by confidence <= 70% |
-| `openbook photos --file "name"` | Filter by filename (substring match) |
-| `openbook photos --after 2025-01-01` | Filter photos taken after date |
-| `openbook photos --before 2025-06-30` | Filter photos taken before date |
-| `openbook photos --page 2` | Show page 2 of results |
-| `openbook photos --per-page 25` | Set results per page (default: 50) |
-| `openbook photos approve <indexes>` | Approve by index (1,2,4-6) |
-| `openbook photos approve --all` | Approve all in current list |
-| `openbook photos approve --all --without 3,5` | Approve all except indexes |
-| `openbook photos approve --all --min-confidence 90` | Approve high-confidence matches |
-| `openbook photos approve --all --scan 45` | Approve all pending from scan |
-| `openbook photos approve --person "Mom" --min-confidence 95` | Approve high-confidence for person |
-| `openbook photos approve <person> <path>` | Approve specific photo |
-| `openbook photos reject <indexes>` | Reject by index |
-| `openbook photos reject --file "name.jpg"` | Reject by filename (must match 1 photo) |
-| `openbook photos reject --all --max-confidence 60` | Reject low-confidence matches |
-| `openbook photos add <person> <path>` | Manually add person to photo |
-| `openbook photos export` | Export all approved to Apple Photos |
-| `openbook photos export --person "Mom"` | Export for specific person |
-
-### Photo Status Values
-
-| Status | Description |
-|--------|-------------|
-| `pending` | Recognized, not reviewed |
-| `approved` | Confirmed correct |
-| `rejected` | Marked as false positive |
-| `manual` | Manually added (false negative correction) |
-| `all` | Show all statuses |
+For detailed command documentation, see `docs/MANUAL.md`.
 
 ## Tech Stack
 
@@ -337,21 +206,4 @@ To validate training worked correctly:
 3. **Adjust confidence**: Lower `minConfidence` for more matches, higher for fewer false positives
 4. **Review corrections**: Use `photos reject` and `photos add` commands to improve accuracy
 
-## Workflow Example
-
-```bash
-# 1. Scan new photos
-openbook scan ~/Pictures/Recent
-
-# 2. Review pending photos from the scan
-openbook photos --scan 15 --status pending --open
-
-# 3. Approve all except wrong ones
-openbook photos approve --all --without 3,7,12
-
-# 4. Clean up low-confidence matches
-openbook photos reject --max-confidence 60
-
-# 5. Export approved to Apple Photos
-openbook photos export
-```
+For common user workflows, see `SKILL.md`.
