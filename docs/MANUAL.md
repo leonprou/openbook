@@ -995,6 +995,8 @@ claude-book scan /path/to/photo/folder
 
 ### Albums not appearing in Apple Photos
 
-- Ensure `osxphotos` is installed: `uv tool install osxphotos`
+- Ensure `osxphotos` is installed: `uv tool install osxphotos` or `pip install osxphotos`
+- Note: osxphotos is only required for the `photos export` command - all other features work without it
 - Check Apple Photos is running
 - Grant terminal access to Photos in System Preferences > Privacy
+- Verify osxphotos is in your PATH: `which osxphotos`

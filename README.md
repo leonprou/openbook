@@ -16,7 +16,7 @@ A CLI tool for organizing family photos using face recognition. Automatically id
 # Install dependencies
 bun install
 
-# Install osxphotos (required for Apple Photos integration)
+# Install osxphotos (optional - required only for Apple Photos export)
 uv tool install osxphotos
 # or: pip install osxphotos
 
@@ -302,12 +302,12 @@ claude-book scan ~/Downloads/TelegramExport/photos
 ## Prerequisites
 
 1. **AWS Account** with Rekognition access
-2. **osxphotos** installed:
+2. **Bun** runtime: https://bun.sh
+3. **osxphotos** (optional - only needed for `photos export` command):
    ```bash
    uv tool install osxphotos
    # or: pip install osxphotos
    ```
-3. **Bun** runtime: https://bun.sh
 
 ## AWS Costs
 
