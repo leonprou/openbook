@@ -52,7 +52,7 @@ import {
 } from "../db";
 import { computeFileHash } from "../utils/hash";
 import { loadConfig } from "../config";
-import { addPhotosToAlbum } from "../export/albums";
+import { addPhotosToAlbum, checkOsxphotosInstalled } from "../export/albums";
 import { Database } from "bun:sqlite";
 
 const SESSION_FILE = ".claude-book-session.json";
@@ -1002,6 +1002,18 @@ export async function photosExportCommand(options: PhotosExportOptions): Promise
   } catch {
     console.log("Database not initialized. Run 'claude-book scan' first.");
     return;
+  }
+
+  // Check if osxphotos is installed
+  const isInstalled = await checkOsxphotosInstalled();
+  if (!isInstalled) {
+    console.error("Error: osxphotos is not installed.\n");
+    console.error("The 'photos export' command requires osxphotos to create Apple Photos albums.\n");
+    console.error("Install osxphotos using one of these methods:\n");
+    console.error("  • Using uv:  uv tool install osxphotos");
+    console.error("  • Using pip: pip install osxphotos\n");
+    console.error("For more information, visit: https://github.com/RhetTbull/osxphotos");
+    process.exit(1);
   }
 
   const config = loadConfig();

@@ -12,7 +12,7 @@ Claude Book uses a two-phase face recognition system:
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │  Training   │────▶│  Scanning   │────▶│   Review    │────▶│   Export    │
-│             │     │             │     │             │     │             │
+│             │     │             │     │             │     │ (optional)  │
 │ references/ │     │ Photo lib   │     │ approve/    │     │ osxphotos   │
 │ → AWS       │     │ → matches   │     │ reject      │     │ → Albums    │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
@@ -36,9 +36,11 @@ Claude Book uses a two-phase face recognition system:
 │                 │     │ - persons       │     │                 │
 │ src/sources/    │     │ - photos        │     │ src/export/     │
 │ - local.ts      │     │ - scans         │     │ - albums.ts     │
-│ - types.ts      │     │ - corrections   │     │ - osxphotos     │
+│ - types.ts      │     │ - corrections   │     │ - osxphotos*    │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
+
+*osxphotos is optional - only required for the `photos export` command
 
 ### Directory Structure
 

@@ -8,7 +8,7 @@ Thank you for your interest in contributing to Claude Book! This document provid
 
 - [Bun](https://bun.sh) runtime installed
 - AWS account with Rekognition access
-- macOS (for Apple Photos integration via osxphotos)
+- macOS with osxphotos (optional - only needed for Apple Photos integration)
 
 ### Setup
 
