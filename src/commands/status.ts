@@ -1,5 +1,5 @@
 import ora from "ora";
-import { loadConfig, getConfigPath } from "../config";
+import { loadConfig, getConfigPath, isUsingGlobalConfig } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 import { existsSync } from "fs";
 import {
@@ -15,9 +15,10 @@ export async function statusCommand(): Promise<void> {
   const configPath = getConfigPath();
 
   // Check config
+  const configType = isUsingGlobalConfig() ? "(global)" : "(local)";
   console.log("Configuration:");
   if (existsSync(configPath)) {
-    console.log(`  ✓ Config file: ${configPath}`);
+    console.log(`  ✓ Config file: ${configPath} ${configType}`);
   } else {
     console.log(`  ✗ Config file not found (run 'openbook init')`);
     return;

@@ -103,7 +103,9 @@ src/
 
 ## Configuration
 
-File: `config.yaml` (created by `init` command)
+File: `~/.config/openbook/config.yaml` (created by `openbook init`)
+
+For project-specific settings, use `openbook init --local` to create a local `./config.yaml` (takes precedence if present).
 
 ```yaml
 aws:
@@ -184,9 +186,9 @@ The openclaw agent uses a restricted IAM policy that:
   # or: pip install osxphotos
   ```
 
-## Local Database
+## Database
 
-File: `.openbook.db` (SQLite, created automatically)
+File: `~/.config/openbook/.openbook.db` (SQLite, created automatically)
 
 The database tracks:
 - **persons**: Known people from training (name, face count, photo count)

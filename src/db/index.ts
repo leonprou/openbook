@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
-import { basename, resolve } from "path";
+import { basename, join } from "path";
+import { existsSync, mkdirSync } from "fs";
 import { getPhotoDateISO } from "../utils/date";
+import { getGlobalConfigDir } from "../config";
 
 const DB_FILE = ".openbook.db";
 
@@ -120,7 +122,11 @@ let db: Database | null = null;
 
 function getDb(): Database {
   if (!db) {
-    const dbPath = resolve(process.cwd(), DB_FILE);
+    const globalDir = getGlobalConfigDir();
+    if (!existsSync(globalDir)) {
+      mkdirSync(globalDir, { recursive: true });
+    }
+    const dbPath = join(globalDir, DB_FILE);
     db = new Database(dbPath);
     db.exec("PRAGMA journal_mode = WAL");
   }

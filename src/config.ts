@@ -86,6 +86,7 @@ const configSchema = z.object({
 export type Config = z.infer<typeof configSchema>;
 
 const CONFIG_FILENAME = "config.yaml";
+const GLOBAL_CONFIG_DIR = join(homedir(), ".config", "openbook");
 
 function expandPath(p: string): string {
   if (p.startsWith("~/")) {
@@ -94,8 +95,21 @@ function expandPath(p: string): string {
   return resolve(p);
 }
 
+export function getGlobalConfigDir(): string {
+  return GLOBAL_CONFIG_DIR;
+}
+
 export function getConfigPath(): string {
-  return join(process.cwd(), CONFIG_FILENAME);
+  const localPath = join(process.cwd(), CONFIG_FILENAME);
+  if (existsSync(localPath)) {
+    return localPath;
+  }
+  return join(GLOBAL_CONFIG_DIR, CONFIG_FILENAME);
+}
+
+export function isUsingGlobalConfig(): boolean {
+  const localPath = join(process.cwd(), CONFIG_FILENAME);
+  return !existsSync(localPath);
 }
 
 export function loadConfig(): Config {

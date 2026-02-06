@@ -1,13 +1,29 @@
 import { writeFileSync, existsSync, mkdirSync } from "fs";
+import { join } from "path";
 import ora from "ora";
-import { loadConfig, getConfigPath, getDefaultConfig } from "../config";
+import { loadConfig, getConfigPath, getDefaultConfig, getGlobalConfigDir } from "../config";
 import { FaceRecognitionClient } from "../rekognition/client";
 
-export async function initCommand(): Promise<void> {
+export interface InitOptions {
+  local?: boolean;
+}
+
+export async function initCommand(options: InitOptions = {}): Promise<void> {
   const spinner = ora();
 
+  // Determine config path based on --local flag
+  let configPath: string;
+  if (options.local) {
+    configPath = join(process.cwd(), "config.yaml");
+  } else {
+    const globalDir = getGlobalConfigDir();
+    if (!existsSync(globalDir)) {
+      mkdirSync(globalDir, { recursive: true });
+    }
+    configPath = join(globalDir, "config.yaml");
+  }
+
   // Create config file if it doesn't exist
-  const configPath = getConfigPath();
   if (!existsSync(configPath)) {
     spinner.start("Creating config file...");
     writeFileSync(configPath, getDefaultConfig());

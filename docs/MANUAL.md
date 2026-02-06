@@ -20,27 +20,45 @@ openbook cleanup                       Remove AWS collection
 
 ### init
 
-Initialize openbook in the current directory.
+Initialize openbook configuration.
 
 ```
-openbook init
+openbook init [--local]
 ```
 
-Creates:
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--local` | Create config in current directory instead of global location |
+
+**Default behavior (global config):**
+
+Creates files in `~/.config/openbook/`:
 - `config.yaml` - Configuration file
-- `.openbook.db` - SQLite database
+- `.openbook.db` - SQLite database (created on first use)
+- `.openbook-session.json` - Session state
+
+Also creates:
 - AWS Rekognition collection
+
+**With `--local` flag:**
+
+Creates `config.yaml` in the current directory. This is useful for project-specific configurations. When a local `config.yaml` exists, it takes precedence over the global config.
 
 **Example:**
 ```bash
+# Standard setup (recommended)
 $ openbook init
-✓ Created config.yaml
+✓ Created config file: ~/.config/openbook/config.yaml
 ✓ Created AWS Rekognition collection: openbook-faces
-✓ Initialized database
 
 Ready! Next steps:
   1. Add reference photos to ./references/<person>/
   2. Run: openbook train ./references
+
+# Project-specific setup
+$ openbook init --local
+✓ Created config file: ./config.yaml
 ```
 
 ---
@@ -953,11 +971,21 @@ Then use `photos reject` to fix any mistakes.
 
 ## Files Created
 
+**Global files** (in `~/.config/openbook/`):
+
 | File | Purpose |
 |------|---------|
 | `config.yaml` | Your configuration |
 | `.openbook.db` | SQLite database (scans, matches, corrections) |
-| `.openbook-session.json` | Temporary session state (gitignored) |
+| `.openbook-session.json` | Temporary session state |
+
+**Local override** (optional):
+
+| File | Purpose |
+|------|---------|
+| `./config.yaml` | Project-specific config (takes precedence if present) |
+
+Create a local config with `openbook init --local` when you need different settings for a specific project.
 
 ---
 

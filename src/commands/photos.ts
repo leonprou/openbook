@@ -1,6 +1,6 @@
 import ora from "ora";
 import { existsSync, readFileSync, writeFileSync, statSync } from "fs";
-import { resolve, dirname, basename } from "path";
+import { resolve, dirname, basename, join } from "path";
 import { printPhotoTable, type PhotoRow } from "../utils/table";
 import { extractDateFromFilename } from "../sources/local";
 
@@ -51,11 +51,13 @@ import {
   type Correction,
 } from "../db";
 import { computeFileHash } from "../utils/hash";
-import { loadConfig } from "../config";
+import { loadConfig, getGlobalConfigDir } from "../config";
 import { addPhotosToAlbum, checkOsxphotosInstalled } from "../export/albums";
 import { Database } from "bun:sqlite";
 
-const SESSION_FILE = ".openbook-session.json";
+function getSessionFilePath(): string {
+  return join(getGlobalConfigDir(), ".openbook-session.json");
+}
 
 // Photo status types
 type PhotoStatus = "pending" | "approved" | "rejected" | "manual" | "all";
@@ -295,19 +297,20 @@ function saveLastQuery(filters: PhotoFilter, results: PhotoResult[]): void {
     timestamp: Date.now(),
   };
 
-  writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2));
+  writeFileSync(getSessionFilePath(), JSON.stringify(session, null, 2));
 }
 
 /**
  * Load last query from session file
  */
 function loadLastQuery(): LastQuery | null {
-  if (!existsSync(SESSION_FILE)) {
+  const sessionPath = getSessionFilePath();
+  if (!existsSync(sessionPath)) {
     return null;
   }
 
   try {
-    const content = readFileSync(SESSION_FILE, "utf-8");
+    const content = readFileSync(sessionPath, "utf-8");
     const session = JSON.parse(content) as LastQuery;
 
     // Check if session is still valid

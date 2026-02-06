@@ -34,6 +34,7 @@ program
 program
   .command("init")
   .description("Initialize config and AWS Rekognition collection")
+  .option("--local", "Create config in current directory instead of global location")
   .action(initCommand);
 
 // Train command with subcommands
