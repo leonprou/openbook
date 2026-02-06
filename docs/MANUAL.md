@@ -669,7 +669,7 @@ Use this when face recognition missed someone in a photo.
 
 ### photos export
 
-Export photos to Apple Photos albums.
+Export approved photos to folders or Apple Photos albums.
 
 ```
 openbook photos export [options]
@@ -679,48 +679,73 @@ openbook photos export [options]
 | Option | Description |
 |--------|-------------|
 | `--person <name>` | Export only this person's photos |
-| `--status <status>` | Filter by status (default: approved) |
-| `--album <name>` | Custom album name |
-| `--dry-run` | Preview without creating albums |
+| `--backend <type>` | Export backend: `folder` (default) or `apple-photos` |
+| `--output <path>` | Output directory (folder backend only) |
+| `--copy` | Copy files instead of creating symlinks (folder backend) |
+| `--album <name>` | Custom album name (Apple Photos only) |
+| `--dry-run` | Preview without exporting |
+
+**Backends:**
+
+| Backend | Description |
+|---------|-------------|
+| `folder` | Creates folders with symlinks to photos (default) |
+| `apple-photos` | Creates Apple Photos albums via osxphotos |
 
 **Examples:**
 ```bash
-# Export all approved photos (one album per person)
+# Default: export to folders with symlinks
 $ openbook photos export
+
+# Specify output directory
+$ openbook photos export --output ~/Desktop/family-photos
+
+# Copy files instead of symlinks
+$ openbook photos export --copy
 
 # Export for specific person
 $ openbook photos export --person "Mom"
 
-# Custom album name
-$ openbook photos export --person "Mom" --album "Mom - 2024 Vacation"
+# Use Apple Photos backend
+$ openbook photos export --backend apple-photos
 
-# Include pending photos
-$ openbook photos export --person "Mom" --status all
+# Apple Photos with custom album name
+$ openbook photos export --backend apple-photos --album "Mom - 2024 Vacation"
 
 # Preview what would be created
 $ openbook photos export --dry-run
 ```
 
-**Output:**
+**Output (folder backend):**
 ```
 $ openbook photos export
 
-Exporting to Apple Photos...
+Exporting 89 approved photos for 3 people using folder...
 
-  Creating album: openbook: Mom
-  Adding 45 photos...
-  ✓ Done
+  ✓ ~/Pictures/openbook-export/Mom: 45 photos
+  ✓ ~/Pictures/openbook-export/Dad: 38 photos
+  ✓ ~/Pictures/openbook-export/Sister: 6 photos
 
-  Creating album: openbook: Dad
-  Adding 38 photos...
-  ✓ Done
-
-  Creating album: openbook: Sister
-  Adding 6 photos...
-  ✓ Done
-
-✓ Exported 89 photos to 3 albums
+Done! Exported 89 photos to ~/Pictures/openbook-export
 ```
+
+**Output (Apple Photos backend):**
+```
+$ openbook photos export --backend apple-photos
+
+Exporting 89 approved photos for 3 people using apple-photos...
+
+  ✓ openbook: Mom: 45 photos
+  ✓ openbook: Dad: 38 photos
+  ✓ openbook: Sister: 6 photos
+
+Done! Exported 89 photos to Apple Photos.
+```
+
+**Notes:**
+- **Symlinks (default):** Save disk space by creating links to original files. If originals move, links break.
+- **Copy mode:** Creates actual copies. Uses more disk space but fully portable.
+- **Apple Photos:** Requires `osxphotos` to be installed (`uv tool install osxphotos`).
 
 ---
 
@@ -929,7 +954,16 @@ training:
   referencesPath: ./references         # Reference photos location
 
 albums:
-  prefix: "openbook"                # Album prefix in Apple Photos
+  prefix: "openbook"                   # Album prefix (legacy, use export.applePhotos.prefix)
+
+export:
+  backend: folder                      # "folder" (default) or "apple-photos"
+  folder:
+    outputPath: ~/Pictures/openbook-export
+    useSymlinks: true                  # true = symlinks, false = copy files
+    overwriteExisting: false           # Skip existing files
+  applePhotos:
+    prefix: "openbook"                 # Album prefix for Apple Photos
 ```
 
 ### Environment Variables

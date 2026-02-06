@@ -56,6 +56,23 @@ const configSchema = z.object({
   albums: z.object({
     prefix: z.string().default("openbook"),
   }),
+  export: z
+    .object({
+      backend: z.enum(["folder", "apple-photos"]).default("folder"),
+      folder: z
+        .object({
+          outputPath: z.string().default("~/Pictures/openbook-export"),
+          useSymlinks: z.boolean().default(true),
+          overwriteExisting: z.boolean().default(false),
+        })
+        .default({}),
+      applePhotos: z
+        .object({
+          prefix: z.string().default("openbook"),
+        })
+        .default({}),
+    })
+    .default({}),
   session: z
     .object({
       timeoutMinutes: z.number().min(1).max(1440).default(15),
@@ -124,6 +141,7 @@ export function loadConfig(): Config {
       sources: { local: {} },
       training: {},
       albums: {},
+      export: {},
       session: {},
       display: {},
       scanning: {},
@@ -137,6 +155,7 @@ export function loadConfig(): Config {
   // Expand paths
   config.sources.local.paths = config.sources.local.paths.map(expandPath);
   config.training.referencesPath = expandPath(config.training.referencesPath);
+  config.export.folder.outputPath = expandPath(config.export.folder.outputPath);
 
   return config;
 }
@@ -182,6 +201,15 @@ training:
 
 albums:
   prefix: "openbook"  # Albums: "openbook: Mom", "openbook: Dad"
+
+export:
+  backend: folder                     # "folder" (default) or "apple-photos"
+  folder:
+    outputPath: ~/Pictures/openbook-export
+    useSymlinks: true                 # true = symlinks, false = copy files
+    overwriteExisting: false          # Skip existing files
+  applePhotos:
+    prefix: "openbook"                # Album prefix for Apple Photos
 
 session:
   timeoutMinutes: 15        # Session cache validity

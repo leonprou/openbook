@@ -3,7 +3,7 @@ name: openbook
 description: |
   Help users organize family photos with face recognition. Use when users want to:
   find/show/review photos of specific people, scan folders for new photos,
-  approve/reject face recognition matches, review pending photos, export to Apple Photos,
+  approve/reject face recognition matches, review pending photos, export photos to folders or Apple Photos,
   or work with photo recognition results.
 allowed-tools:
   - Bash(bun run start *)
@@ -24,7 +24,7 @@ Invoke this skill when users ask to:
 - Scan new photos or folders
 - Approve or reject face recognition matches
 - Review pending photos
-- Export photos to Apple Photos
+- Export photos to folders or Apple Photos
 - Work with photo recognition results
 
 If the user provides a person name as `$ARGUMENTS`, use it to filter photo operations.
@@ -64,7 +64,8 @@ Available people:
 | **Scan new photos** | `bun run start scan <path> --person "Name"` |
 | **Approve high confidence** | `bun run start photos approve --min-confidence 90 --all` |
 | **Reject low confidence** | `bun run start photos reject --max-confidence 60` |
-| **Export to Apple Photos** | `bun run start photos export --person "Name"` |
+| **Export to folder** | `bun run start photos export --person "Name"` |
+| **Export to Apple Photos** | `bun run start photos export --backend apple-photos` |
 
 ## Finding and Presenting Photos
 
@@ -205,14 +206,23 @@ bun run start photos reject --max-confidence 60
 bun run start photos reject --max-confidence 70 --person "$ARGUMENTS"
 ```
 
-### 📤 Export to Apple Photos
+### 📤 Export Photos
 
 ```bash
-# Export all approved (one album per person)
+# Export to folders with symlinks (default)
 bun run start photos export
+
+# Export to specific output folder
+bun run start photos export --output ~/Desktop/family-photos
+
+# Copy files instead of symlinks
+bun run start photos export --copy
 
 # Person-specific export
 bun run start photos export --person "$ARGUMENTS"
+
+# Export to Apple Photos instead
+bun run start photos export --backend apple-photos
 
 # Preview first
 bun run start photos export --dry-run
@@ -237,7 +247,7 @@ bun run start photos export --dry-run
 - ✅ **Show first**: List photos so user sees indexes before action
 - ✅ **Bulk operations**: Prefer `--all --without` over individual indexes
 - ✅ **Confidence filters**: Bulk approve/reject by confidence threshold
-- ✅ **Explain implications**: Approval → eligible for export; rejection → excluded
+- ✅ **Explain implications**: Approval → eligible for export (to folder or Apple Photos); rejection → excluded
 
 ### 🎓 Training
 - ⚠️ **NEVER auto-run**: Always ask explicit approval for `bun run start train`

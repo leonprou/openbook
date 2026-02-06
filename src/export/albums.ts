@@ -1,5 +1,7 @@
 import { spawn } from "child_process";
 import { createLogger } from "../logger";
+import type { Exporter, ExportPhoto, ExportOptions, ExportResult } from "./types";
+import type { Config } from "../config";
 
 const log = createLogger("albums");
 
@@ -179,4 +181,53 @@ export async function deleteAlbum(albumName: string): Promise<boolean> {
 
   log.info({ albumName }, "Album deleted");
   return true;
+}
+
+export class ApplePhotosExporter implements Exporter {
+  name = "apple-photos";
+  private prefix: string;
+
+  constructor(config: Config["export"]["applePhotos"]) {
+    this.prefix = config.prefix;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return checkOsxphotosInstalled();
+  }
+
+  describeDestination(personName: string): string {
+    return `${this.prefix}: ${personName}`;
+  }
+
+  async export(
+    personPhotos: Map<string, ExportPhoto[]>,
+    options: ExportOptions
+  ): Promise<ExportResult[]> {
+    const results: ExportResult[] = [];
+
+    for (const [personName, photos] of personPhotos) {
+      const albumName = `${this.prefix}: ${personName}`;
+      const photoPaths = photos.map((p) => p.path);
+
+      if (options.dryRun) {
+        results.push({
+          destination: albumName,
+          photosExported: photoPaths.length,
+          photosSkipped: 0,
+          errors: [],
+        });
+        continue;
+      }
+
+      const albumResult = await addPhotosToAlbum(albumName, photoPaths);
+      results.push({
+        destination: albumResult.albumName,
+        photosExported: albumResult.photosAdded,
+        photosSkipped: 0,
+        errors: albumResult.errors,
+      });
+    }
+
+    return results;
+  }
 }

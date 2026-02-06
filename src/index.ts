@@ -174,9 +174,13 @@ photos
 
 photos
   .command("export")
-  .description("Export approved photos to Apple Photos albums")
+  .description("Export approved photos to folders or Apple Photos")
   .option("--person <name>", "Export only for specific person")
-  .option("--album <name>", "Custom album name")
+  .option("--album <name>", "Custom album name (Apple Photos only)")
+  .option("--backend <type>", "Export backend: folder (default) or apple-photos")
+  .option("--output <path>", "Output directory (folder backend only)")
+  .option("--copy", "Copy files instead of creating symlinks (folder backend)")
+  .option("--dry-run", "Preview without exporting")
   .action(photosExportCommand);
 
 program

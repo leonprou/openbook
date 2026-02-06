@@ -52,7 +52,13 @@ import {
 } from "../db";
 import { computeFileHash } from "../utils/hash";
 import { loadConfig, getGlobalConfigDir } from "../config";
-import { addPhotosToAlbum, checkOsxphotosInstalled } from "../export/albums";
+import {
+  createExporter,
+  getExporter,
+  FolderExporter,
+  type ExporterType,
+  type ExportPhoto,
+} from "../export";
 import { Database } from "bun:sqlite";
 
 function getSessionFilePath(): string {
@@ -396,6 +402,10 @@ interface PhotosRejectOptions {
 interface PhotosExportOptions {
   person?: string;
   album?: string;
+  backend?: ExporterType;
+  output?: string;
+  copy?: boolean;
+  dryRun?: boolean;
 }
 
 /**
@@ -1007,19 +1017,40 @@ export async function photosExportCommand(options: PhotosExportOptions): Promise
     return;
   }
 
-  // Check if osxphotos is installed
-  const isInstalled = await checkOsxphotosInstalled();
-  if (!isInstalled) {
-    console.error("Error: osxphotos is not installed.\n");
-    console.error("The 'photos export' command requires osxphotos to create Apple Photos albums.\n");
-    console.error("Install osxphotos using one of these methods:\n");
-    console.error("  • Using uv:  uv tool install osxphotos");
-    console.error("  • Using pip: pip install osxphotos\n");
-    console.error("For more information, visit: https://github.com/RhetTbull/osxphotos");
+  const config = loadConfig();
+
+  // Determine which backend to use
+  const backendType = options.backend ?? config.export.backend;
+
+  // Create exporter with any CLI overrides
+  let exporter;
+  if (backendType === "folder") {
+    const folderConfig = {
+      ...config.export.folder,
+      outputPath: options.output ?? config.export.folder.outputPath,
+      useSymlinks: options.copy ? false : config.export.folder.useSymlinks,
+    };
+    exporter = new FolderExporter(folderConfig);
+  } else {
+    exporter = getExporter(backendType, config);
+  }
+
+  // Check if backend is available
+  const isAvailable = await exporter.isAvailable();
+  if (!isAvailable) {
+    if (backendType === "apple-photos") {
+      console.error("Error: osxphotos is not installed.\n");
+      console.error("The Apple Photos backend requires osxphotos.\n");
+      console.error("Install osxphotos using one of these methods:\n");
+      console.error("  • Using uv:  uv tool install osxphotos");
+      console.error("  • Using pip: pip install osxphotos\n");
+      console.error("Or use folder export: openbook photos export --backend folder");
+    } else {
+      console.error(`Error: Export backend "${backendType}" is not available.`);
+    }
     process.exit(1);
   }
 
-  const config = loadConfig();
   const spinner = ora();
 
   // Get all approved photos
@@ -1040,31 +1071,55 @@ export async function photosExportCommand(options: PhotosExportOptions): Promise
     return;
   }
 
-  // Group by person
-  const personPhotos = new Map<string, string[]>();
+  // Group by person and convert to ExportPhoto format
+  const personPhotos = new Map<string, ExportPhoto[]>();
   for (const result of results) {
     const existing = personPhotos.get(result.person) ?? [];
-    if (!existing.includes(result.path)) {
-      existing.push(result.path);
+    // Avoid duplicates
+    if (!existing.some((p) => p.path === result.path)) {
+      existing.push({
+        path: result.path,
+        hash: result.hash,
+        personName: result.person,
+        photoDate: result.date?.toISOString(),
+      });
     }
     personPhotos.set(result.person, existing);
   }
 
-  console.log(`Exporting ${results.length} approved photos for ${personPhotos.size} people...\n`);
+  const totalPhotos = Array.from(personPhotos.values()).reduce((sum, arr) => sum + arr.length, 0);
+  const dryRunLabel = options.dryRun ? " (dry run)" : "";
+  console.log(`Exporting ${totalPhotos} approved photos for ${personPhotos.size} people using ${exporter.name}...${dryRunLabel}\n`);
 
-  // Create albums
-  for (const [personName, photoPaths] of personPhotos) {
-    const albumName = options.album ?? `${config.albums.prefix}: ${personName}`;
+  // Export using the selected backend
+  const exportResults = await exporter.export(personPhotos, {
+    dryRun: options.dryRun,
+    person: options.person,
+  });
 
-    spinner.start(`Creating "${albumName}"...`);
-    const result = await addPhotosToAlbum(albumName, photoPaths);
-
+  // Display results
+  for (const result of exportResults) {
     if (result.errors.length === 0) {
-      spinner.succeed(`"${albumName}": ${result.photosAdded} photos`);
+      const skippedMsg = result.photosSkipped > 0 ? ` (${result.photosSkipped} skipped)` : "";
+      console.log(`  ✓ ${result.destination}: ${result.photosExported} photos${skippedMsg}`);
     } else {
-      spinner.fail(`"${albumName}": ${result.errors.join(", ")}`);
+      console.log(`  ✗ ${result.destination}: ${result.errors.join(", ")}`);
     }
   }
 
-  console.log("\nDone! Photos exported to Apple Photos.");
+  const totalExported = exportResults.reduce((sum, r) => sum + r.photosExported, 0);
+  const totalSkipped = exportResults.reduce((sum, r) => sum + r.photosSkipped, 0);
+
+  console.log("");
+  if (options.dryRun) {
+    console.log(`Dry run complete. Would export ${totalExported} photos.`);
+  } else {
+    const skippedMsg = totalSkipped > 0 ? ` (${totalSkipped} already existed)` : "";
+    if (backendType === "folder") {
+      const folderConfig = options.output ?? config.export.folder.outputPath;
+      console.log(`Done! Exported ${totalExported} photos to ${folderConfig}${skippedMsg}`);
+    } else {
+      console.log(`Done! Exported ${totalExported} photos to Apple Photos.${skippedMsg}`);
+    }
+  }
 }
