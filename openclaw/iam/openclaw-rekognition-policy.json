@@ -1,0 +1,52 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OpenbookRekognitionReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "rekognition:DescribeCollection",
+        "rekognition:ListFaces",
+        "rekognition:ListUsers"
+      ],
+      "Resource": "arn:aws:rekognition:*:*:collection/openbook-*"
+    },
+    {
+      "Sid": "OpenbookRekognitionTraining",
+      "Effect": "Allow",
+      "Action": [
+        "rekognition:IndexFaces",
+        "rekognition:CreateUser",
+        "rekognition:AssociateFaces",
+        "rekognition:DeleteUser"
+      ],
+      "Resource": "arn:aws:rekognition:*:*:collection/openbook-*"
+    },
+    {
+      "Sid": "OpenbookRekognitionScanning",
+      "Effect": "Allow",
+      "Action": [
+        "rekognition:SearchFacesByImage",
+        "rekognition:SearchUsersByImage",
+        "rekognition:CompareFaces"
+      ],
+      "Resource": "arn:aws:rekognition:*:*:collection/openbook-*"
+    },
+    {
+      "Sid": "OpenbookRekognitionCollectionInit",
+      "Effect": "Allow",
+      "Action": [
+        "rekognition:CreateCollection"
+      ],
+      "Resource": "arn:aws:rekognition:*:*:collection/openbook-*"
+    },
+    {
+      "Sid": "DenyDestructiveOperations",
+      "Effect": "Deny",
+      "Action": [
+        "rekognition:DeleteCollection"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

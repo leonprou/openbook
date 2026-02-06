@@ -1,0 +1,16 @@
+node_modules/
+.git/
+.openbook.db*
+.openbook-*.json
+config.yaml
+references/
+.env*
+.claude/
+*.log
+.DS_Store
+bun.lockb
+dist/
+*.swp
+*.swo
+.idea/
+.vscode/
