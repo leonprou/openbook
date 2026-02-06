@@ -10,16 +10,48 @@ A CLI tool for organizing family photos using face recognition. Automatically id
 - **Learns** from your corrections (approve/reject matches)
 - **Organizes** photos into Apple Photos albums by person
 
-## Quick Start
+## Installation
+
+### Prerequisites
+
+1. **Bun runtime**: https://bun.sh
+2. **AWS Account** with Rekognition access
+
+### Install openbook
 
 ```bash
+# Clone the repository
+git clone https://github.com/leonprou/openbook.git
+cd openbook
+
 # Install dependencies
 bun install
 
-# Install osxphotos (optional - required only for Apple Photos export)
+# Install globally (makes 'openbook' command available anywhere)
+bun link
+```
+
+### Optional: Install osxphotos
+
+Only required if you want to export albums to Apple Photos:
+
+```bash
 uv tool install osxphotos
 # or: pip install osxphotos
+```
 
+### Running Without Global Install
+
+If you prefer not to install globally, run commands from the project directory:
+
+```bash
+bun run start <command>
+# Example: bun run start init
+```
+
+## Quick Start
+
+```bash
 # 1. Initialize (creates config, sets up AWS collection)
 openbook init
 
@@ -226,6 +258,17 @@ AWS_SECRET_ACCESS_KEY=your_secret
 AWS_REGION=us-east-1
 ```
 
+### For AI Agents (Restricted Access)
+
+To create restricted IAM credentials that prevent accidental data loss:
+
+```bash
+# See docs/AWS-Setup-Openclaw.md for full setup instructions
+./scripts/setup-openclaw-iam.sh
+```
+
+The restricted policy allows training and scanning but blocks collection deletion. Perfect for AI agents that need controlled access to AWS Rekognition.
+
 ## Reference Photos Structure
 
 Organize reference photos with one folder per person:
@@ -299,15 +342,6 @@ Family photos are often shared in Telegram groups:
 openbook scan ~/Downloads/TelegramExport/photos
 ```
 
-## Prerequisites
-
-1. **AWS Account** with Rekognition access
-2. **Bun** runtime: https://bun.sh
-3. **osxphotos** (optional - only needed for `photos export` command):
-   ```bash
-   uv tool install osxphotos
-   # or: pip install osxphotos
-   ```
 
 ## AWS Costs
 

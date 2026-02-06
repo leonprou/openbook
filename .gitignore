@@ -29,6 +29,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.env.openclaw
 
 # Database (both old and new names for backward compatibility)
 .claude-book.db

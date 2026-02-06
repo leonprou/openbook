@@ -165,6 +165,17 @@ AWS_SECRET_ACCESS_KEY=your_secret
 AWS_REGION=us-east-1
 ```
 
+## IAM Setup for AI Agents
+
+For restricted AWS access (e.g., openclaw agent), see `openclaw/docs/AWS-Setup-Openclaw.md`.
+
+For deployment instructions, see `openclaw/DEPLOYMENT.md`.
+
+The openclaw agent uses a restricted IAM policy that:
+- Allows training, scanning, and status operations
+- Denies collection deletion (data protection)
+- Scopes access to `openbook-*` collections only
+
 ## External Dependencies
 
 - **osxphotos**: Required for Apple Photos integration
